@@ -312,6 +312,8 @@ class WaveformGenerator_33XXX(KeysightErrorQueueMixin, VisaInstrument):
                           '33522B': 2,
                           '33622A': 2,
                           '33510B': 2,
+                          '33509B': 1,
+                          '33120A': 1,
                           }
 
         self._max_freqs = {'33210A': 10e6,
@@ -321,6 +323,8 @@ class WaveformGenerator_33XXX(KeysightErrorQueueMixin, VisaInstrument):
                            '33522B': 30e6,
                            '33622A': 120e6,
                            '33510B': 20e6,
+                           '33509B': 20e6,
+                           '33120A': 15e6,
                           }
 
         self.num_channels = no_of_channels[self.model]
