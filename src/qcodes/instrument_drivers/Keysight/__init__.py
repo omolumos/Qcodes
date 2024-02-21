@@ -6,8 +6,10 @@ from .Infiniium import (
     KeysightInfiniiumFunction,
     KeysightInfiniiumUnboundMeasurement,
 )
+from .Keysight_33120a import Keysight33120A
 from .Keysight_33210a import Keysight33210A
 from .Keysight_33250a import Keysight33250A
+from .Keysight_33509b import Keysight33509B
 from .Keysight_33511b import Keysight33511B
 from .Keysight_33512b import Keysight33512B
 from .Keysight_33522b import Keysight33522B
@@ -58,8 +60,10 @@ from .KtMAwg import KeysightM9336A, KeysightM9336AAWGChannel
 from .N52xx import KeysightPNAPort, KeysightPNATrace
 
 __all__ = [
+    "Keysight33120A",
     "Keysight33210A",
     "Keysight33250A",
+    "Keysight33509B",
     "Keysight33511B",
     "Keysight33512B",
     "Keysight33522B",
