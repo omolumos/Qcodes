@@ -46,7 +46,7 @@ class Keithley6500CommandSetError(Exception):
 
 class Keithley6500(VisaInstrument):
     def __init__(
-        self, name: str, address: str, reset_device: bool = False, **kwargs: Any
+        self, name: str, address: str, check_lang: bool = False, reset_device: bool = False, **kwargs: Any
     ):
         """Driver for the Keithley 6500 multimeter. Based on the Keithley 2000 driver,
             commands have been adapted for the Keithley 6500. This driver does not contain
@@ -61,13 +61,15 @@ class Keithley6500(VisaInstrument):
         """
         super().__init__(name, address, terminator="\n", **kwargs)
 
-        command_set = self.ask("*LANG?")
-        if command_set != "SCPI":
-            error_msg = (
-                "This driver only compatible with the 'SCPI' command "
-                f"set, not '{command_set}' set"
-            )
-            raise Keithley6500CommandSetError(error_msg)
+        if check_lang:
+            command_set = self.ask("*LANG?")
+            if command_set != "SCPI":
+                error_msg = (
+                    "This driver only compatible with the 'SCPI' command "
+                    f"set, not '{command_set}' set"
+                )
+                raise Keithley6500CommandSetError(error_msg)
+            command_set = "SCPI"
 
         self._trigger_sent = False
 
