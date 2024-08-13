@@ -222,6 +222,7 @@ class AimTTi(VisaInstrument):
         "PL303QMD-P": 2,
         "PL303QMT-P": 3,
         "QL355TP": 3,
+        "QL564P": 1,
     }
 
     def __init__(self, name: str, address: str, **kwargs: Any) -> None:
