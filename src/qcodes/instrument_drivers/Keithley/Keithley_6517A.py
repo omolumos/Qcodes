@@ -4,6 +4,8 @@ from typing import Any, Callable, TypeVar, Union
 from qcodes.instrument import VisaInstrument
 from qcodes.validators import Bool, Enum, Ints, MultiType, Numbers
 
+from qcodes.parameters import create_on_off_val_mapping
+
 T = TypeVar("T")
 
 
@@ -40,15 +42,15 @@ def _parse_output_bool(numeric_value: Union[float, str]) -> bool:
     return bool(numeric_value)
 
 
-class Keithley6500CommandSetError(Exception):
+class Keithley6517ACommandSetError(Exception):
     pass
 
 
-class Keithley6500(VisaInstrument):
+class Keithley6517A(VisaInstrument):
     def __init__(
-        self, name: str, address: str, reset_device: bool = False, **kwargs: Any
+        self, name: str, address: str, check_lang: bool = False, reset_device: bool = False, **kwargs: Any
     ):
-        """Driver for the Keithley 6500 multimeter. Based on the Keithley 2000 driver,
+        """Driver for the Keithley 6517A multimeter. Based on the Keithley 2000 driver,
             commands have been adapted for the Keithley 6500. This driver does not contain
             all commands available, but only the ones most commonly used.
 
@@ -61,31 +63,33 @@ class Keithley6500(VisaInstrument):
         """
         super().__init__(name, address, terminator="\n", **kwargs)
 
-        command_set = self.ask("*LANG?")
-        if command_set != "SCPI":
-            error_msg = (
-                "This driver only compatible with the 'SCPI' command "
-                f"set, not '{command_set}' set"
-            )
-            raise Keithley6500CommandSetError(error_msg)
+        if check_lang:
+            command_set = self.ask("*LANG?")
+            if command_set != "SCPI":
+                error_msg = (
+                    "This driver only compatible with the 'SCPI' command "
+                    f"set, not '{command_set}' set"
+                )
+                raise Keithley6517ACommandSetError(error_msg)
+            command_set = "SCPI"
 
         self._trigger_sent = False
 
         self._mode_map = {
-            "ac current": "CURR:AC",
-            "dc current": "CURR:DC",
-            "ac voltage": "VOLT:AC",
-            "dc voltage": "VOLT:DC",
-            "2w resistance": "RES",
-            "4w resistance": "FRES",
-            "temperature": "TEMP",
-            "frequency": "FREQ",
+            "ac current": '"CURR:AC"',
+            "dc current": '"CURR:DC"',
+            "ac voltage": '"VOLT:AC"',
+            "dc voltage": '"VOLT:DC"',
+            "2w resistance": '"RES"',
+            "4w resistance": '"FRES"',
+            "temperature": '"TEMP"',
+            "frequency": '"FREQ"',
         }
 
         self.add_parameter(
             "mode",
             get_cmd="SENS:FUNC?",
-            set_cmd="SENS:FUNC '{}'",
+            set_cmd=r'SENS:FUNC {}',
             val_mapping=self._mode_map,
         )
 
@@ -113,14 +117,6 @@ class Keithley6500(VisaInstrument):
         )
 
         self.add_parameter(
-            "digits",
-            get_cmd="DISP:VOLT:DC:DIG?",
-            get_parser=int,
-            set_cmd="DISP:VOLT:DC:DIG? {}",
-            vals=Ints(min_value=4, max_value=7),
-        )
-
-        self.add_parameter(
             "averaging_type",
             get_cmd=partial(self._get_mode_param, "AVER:TCON", _parse_output_string),
             set_cmd=partial(self._set_mode_param, "AVER:TCON"),
@@ -141,80 +137,19 @@ class Keithley6500(VisaInstrument):
             vals=Bool(),
         )
 
-        # Global parameters
         self.add_parameter(
-            "display_backlight",
-            docstring="Control the brightness of the display "
-            "backligt. Off turns the display off and"
-            "Blackout also turns off indicators and "
-            "key lights on the device.",
-            get_cmd="DISP:LIGH:STAT?",
-            set_cmd="DISP:LIGH:STAT {}",
-            val_mapping={
-                "On 100": "ON100",
-                "On 75": "ON75",
-                "On 50": "ON50",
-                "On 25": "ON25",
-                "Off": "OFF",
-                "Blackout": "BLACkout",
-            },
-        )
-
-        self.add_parameter(
-            "trigger_count",
-            get_parser=int,
-            get_cmd="ROUT:SCAN:COUN:SCAN?",
-            set_cmd="ROUT:SCAN:COUN:SCAN {}",
-            vals=MultiType(
-                Ints(min_value=1, max_value=9999),
-                Enum("inf", "default", "minimum", "maximum"),
-            ),
-        )
-
-        for trigger in range(1, 5):
-            self.add_parameter(
-                "trigger%i_delay" % trigger,
-                docstring="Set and read trigger delay for timer %i." % trigger,
-                get_parser=float,
-                get_cmd="TRIG:TIM%i:DEL?" % trigger,
-                set_cmd="TRIG:TIM%i:DEL {}" % trigger,
-                unit="s",
-                vals=Numbers(min_value=0, max_value=999999.999),
-            )
-
-            self.add_parameter(
-                "trigger%i_source" % trigger,
-                docstring="Set the trigger source for timer %i." % trigger,
-                get_cmd="TRIG:TIM%i:STAR:STIM?" % trigger,
-                set_cmd="TRIG:TIM%i:STAR:STIM {}" % trigger,
-                val_mapping={
-                    "immediate": "NONE",
-                    "timer1": "TIM1",
-                    "timer2": "TIM2",
-                    "timer3": "TIM3",
-                    "timer4": "TIM4",
-                    "notify1": "NOT1",
-                    "notify2": "NOT2",
-                    "notify3": "NOT3",
-                    "front-panel": "DISP",
-                    "bus": "COMM",
-                    "external": "EXT",
-                },
-            )
-
-        # Control interval between scans; the default value from the instrument is 0,
-        # hence 0 is included in the validator's range of this parameter.
-        self.add_parameter(
-            "trigger_timer",
+            "output",
+            get_cmd="outp?",
             get_parser=float,
-            get_cmd="ROUT:SCAN:INT?",
-            set_cmd="ROUT:SCAN:INT {}",
-            unit="s",
-            vals=Numbers(min_value=0, max_value=999999.999),
+            set_cmd=f"outp {{:d}}",
+            val_mapping=create_on_off_val_mapping(on_val=1, off_val=0),
         )
 
         self.add_parameter(
-            "amplitude", get_cmd=self._read_next_value, set_cmd=False, unit="a.u."
+            "volt",
+            get_cmd="sour:volt:lev?",
+            get_parser=float,
+            set_cmd=f"sour:volt:lev {{:f}}",
         )
 
         if reset_device:
