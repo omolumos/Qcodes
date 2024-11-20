@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Hashable, Mapping
+from importlib.metadata import version
 from math import prod
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
-import numpy as np
-from tqdm.dask import TqdmCallback
+from packaging import version as pversion
 
 from qcodes.dataset.linked_datasets.links import links_to_str
 
@@ -20,6 +18,10 @@ from .export_to_pandas import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Hashable, Mapping
+    from pathlib import Path
+
+    import numpy as np
     import pandas as pd
     import xarray as xr
 
@@ -171,8 +173,7 @@ def _add_metadata_to_xarray(
     if dataset.run_timestamp_raw is not None:
         xrdataset.attrs["run_timestamp_raw"] = dataset.run_timestamp_raw
     if dataset.completed_timestamp_raw is not None:
-        xrdataset.attrs[
-            "completed_timestamp_raw"] = dataset.completed_timestamp_raw
+        xrdataset.attrs["completed_timestamp_raw"] = dataset.completed_timestamp_raw
     if len(dataset.metadata) > 0:
         for metadata_tag, metadata in dataset.metadata.items():
             xrdataset.attrs[metadata_tag] = metadata
@@ -262,7 +263,16 @@ def xarray_to_h5netcdf_with_complex_numbers(
         internal_ds.data_vars[data_var].dtype.kind for data_var in internal_ds.data_vars
     ]
     coord_kinds = [internal_ds.coords[coord].dtype.kind for coord in internal_ds.coords]
-    allow_invalid_netcdf = "c" in data_var_kinds or "c" in coord_kinds
+    dataset_has_complex_vals = "c" in data_var_kinds or "c" in coord_kinds
+    # these are the versions of xarray / h5netcdf respectively required to support complex
+    # values without fallback to invalid features. Once these are the min versions supported
+    # we can drop the fallback code here including the warning suppression.
+    xarry_too_old = pversion.Version(version("xarray")) < pversion.Version("2024.10.0")
+    h5netcdf_too_old = pversion.Version(version("h5netcdf")) < pversion.Version("1.4.0")
+
+    allow_invalid_netcdf = dataset_has_complex_vals and (
+        xarry_too_old or h5netcdf_too_old
+    )
 
     with warnings.catch_warnings():
         # see http://xarray.pydata.org/en/stable/howdoi.html
@@ -278,13 +288,17 @@ def xarray_to_h5netcdf_with_complex_numbers(
             path=file_path,
             engine="h5netcdf",
             invalid_netcdf=allow_invalid_netcdf,
-            compute=compute,  # pyright: ignore
+            compute=compute,
         )
-        # https://github.com/microsoft/pyright/issues/6069
         if not compute and maybe_write_job is not None:
+            # Dask and therefor tqdm.dask is slow to
+            # import and only used here so defer the import
+            # to when required.
+            from tqdm.dask import TqdmCallback
+
             with TqdmCallback(desc="Combining files"):
                 _LOG.info(
                     "Writing netcdf file using Dask delayed writer.",
-                    extra={"file_name": file_path},
+                    extra={"file_name": str(file_path)},
                 )
                 maybe_write_job.compute()

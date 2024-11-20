@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import ast
 import gc
-from collections.abc import Iterable
 from pathlib import Path
 from sqlite3 import DatabaseError
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from qcodes.dataset.data_set import get_guids_by_run_spec
 from qcodes.dataset.guids import validate_guid_format
 from qcodes.dataset.sqlite.database import connect
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 def guids_from_dbs(
@@ -24,6 +26,7 @@ def guids_from_dbs(
     Returns:
         Tuple of Dictionary mapping paths to lists of guids as strings
         and Dictionary mapping guids to db paths.
+
     """
     dbdict = {}
     for p in db_paths:
@@ -55,6 +58,7 @@ def guids_from_dir(
     Returns:
         Tuple of Dictionary mapping paths to lists of guids as strings
         and Dictionary mapping guids to db paths.
+
     """
     return guids_from_dbs(Path(basepath).glob("**/*.db"))
 
@@ -81,6 +85,7 @@ def guids_from_list_str(s: str) -> tuple[str, ...] | None:
         will return
         ('07fd7195-c51e-44d6-a085-fa8274cf00d6',
         '070d7195-c51e-44d6-a085-fa8274cf00d6')
+
     """
     if s == "":
         return tuple()

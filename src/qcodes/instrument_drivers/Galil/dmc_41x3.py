@@ -3,13 +3,19 @@ This file holds the QCoDeS driver for the Galil DMC-41x3 motor controllers.
 
 Colloquially known as the "stepper motors".
 """
-from typing import Any, Optional
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
 
-from qcodes.instrument import Instrument, InstrumentChannel
+from qcodes.instrument import Instrument, InstrumentBaseKWArgs, InstrumentChannel
 from qcodes.validators import Enum, Ints, Multiples
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+    from qcodes.parameters import Parameter
 
 try:
     import gclib  # pyright: ignore[reportMissingImports]
@@ -29,13 +35,17 @@ class GalilMotionController(Instrument):
     Base class for Galil Motion Controller drivers
     """
 
-    def __init__(self, name: str, address: str, **kwargs: Any) -> None:
+    def __init__(
+        self, name: str, address: str, **kwargs: "Unpack[InstrumentBaseKWArgs]"
+    ) -> None:
         """
         Initializes and opens the connection to the Galil Motion Controller
 
         Args:
             name: name for the instrument
             address: address of the controller
+            **kwargs: kwargs are forwarded to base class.
+
         """
         super().__init__(name=name, **kwargs)
         self.g = gclib.py()
@@ -54,12 +64,12 @@ class GalilMotionController(Instrument):
         """
         self.g.GOpen(self._address + " --direct -s ALL")
 
-    def get_idn(self) -> dict[str, Optional[str]]:
+    def get_idn(self) -> dict[str, str | None]:
         """
         Get Galil motion controller hardware information
         """
         data = self.g.GInfo().split(" ")
-        idparts: list[Optional[str]] = [
+        idparts: list[str | None] = [
             "Galil Motion Control, Inc.",
             data[1],
             data[4],
@@ -86,6 +96,7 @@ class GalilMotionController(Instrument):
 
         Args:
             val: time in milliseconds. -1 disables the timeout
+
         """
         if val < -1:
             raise RuntimeError("Timeout value cannot be set less than -1")
@@ -112,7 +123,10 @@ class GalilDMC4133VectorMode(InstrumentChannel):
     """
 
     def __init__(
-        self, parent: "GalilDMC4133Controller", name: str, **kwargs: Any
+        self,
+        parent: "GalilDMC4133Controller",
+        name: str,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
     ) -> None:
         """
         Initializes the vector mode submodule for the controller
@@ -120,6 +134,8 @@ class GalilDMC4133VectorMode(InstrumentChannel):
         Args:
             parent: an instance of DMC4133Controller
             name: name of the vector mode plane
+            **kwargs: kwargs are forwarded to base class.
+
         """
         super().__init__(parent, name, **kwargs)
         self._plane = name
@@ -127,7 +143,7 @@ class GalilDMC4133VectorMode(InstrumentChannel):
             min_value=-2147483648, max_value=2147483647
         )
 
-        self.add_parameter(
+        self.coordinate_system: Parameter = self.add_parameter(
             "coordinate_system",
             get_cmd="CA ?",
             get_parser=self._parse_coordinate_system_active,
@@ -138,8 +154,9 @@ class GalilDMC4133VectorMode(InstrumentChannel):
             "'S' and 'T'. All vector mode commands will apply to "
             "the active coordinate system.",
         )
+        """activates coordinate system for the motion. Two  coordinate systems are possible with values 'S' and 'T'. All vector mode commands will apply to the active coordinate system."""
 
-        self.add_parameter(
+        self.vector_acceleration: Parameter = self.add_parameter(
             "vector_acceleration",
             get_cmd="VA ?",
             get_parser=lambda s: int(float(s)),
@@ -148,8 +165,9 @@ class GalilDMC4133VectorMode(InstrumentChannel):
             unit="counts/sec2",
             docstring="sets and gets the defined vector's acceleration",
         )
+        """sets and gets the defined vector's acceleration"""
 
-        self.add_parameter(
+        self.vector_deceleration: Parameter = self.add_parameter(
             "vector_deceleration",
             get_cmd="VD ?",
             get_parser=lambda s: int(float(s)),
@@ -158,8 +176,9 @@ class GalilDMC4133VectorMode(InstrumentChannel):
             unit="counts/sec2",
             docstring="sets and gets the defined vector's deceleration",
         )
+        """sets and gets the defined vector's deceleration"""
 
-        self.add_parameter(
+        self.vector_speed: Parameter = self.add_parameter(
             "vector_speed",
             get_cmd="VS ?",
             get_parser=lambda s: int(float(s)),
@@ -168,6 +187,7 @@ class GalilDMC4133VectorMode(InstrumentChannel):
             unit="counts/sec",
             docstring="sets and gets defined vector's speed",
         )
+        """sets and gets defined vector's speed"""
 
     @staticmethod
     def _parse_coordinate_system_active(val: str) -> str:
@@ -240,7 +260,10 @@ class GalilDMC4133Motor(InstrumentChannel):
     """
 
     def __init__(
-        self, parent: "GalilDMC4133Controller", name: str, **kwargs: Any
+        self,
+        parent: "GalilDMC4133Controller",
+        name: str,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
     ) -> None:
         """
         Initializes individual motor submodules
@@ -248,11 +271,13 @@ class GalilDMC4133Motor(InstrumentChannel):
         Args:
             parent: an instance of DMC4133Controller
             name: name of the motor to be controlled
+            **kwargs: kwargs are forwarded to base class.
+
         """
         super().__init__(parent, name, **kwargs)
         self._axis = name
 
-        self.add_parameter(
+        self.relative_position: Parameter = self.add_parameter(
             "relative_position",
             unit="quadrature counts",
             get_cmd=f"MG _PR{self._axis}",
@@ -261,8 +286,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             vals=Ints(-2147483648, 2147483647),
             docstring="sets relative position for the motor's move",
         )
+        """sets relative position for the motor's move"""
 
-        self.add_parameter(
+        self.speed: Parameter = self.add_parameter(
             "speed",
             unit="counts/sec",
             get_cmd=f"MG _SP{self._axis}",
@@ -271,8 +297,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             vals=Multiples(min_value=0, max_value=3000000, divisor=2),
             docstring="speed for motor's motion",
         )
+        """speed for motor's motion"""
 
-        self.add_parameter(
+        self.acceleration: Parameter = self.add_parameter(
             "acceleration",
             unit="counts/sec2",
             get_cmd=f"MG _AC{self._axis}",
@@ -281,8 +308,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             vals=Multiples(min_value=1024, max_value=1073740800, divisor=1024),
             docstring="acceleration for motor's motion",
         )
+        """acceleration for motor's motion"""
 
-        self.add_parameter(
+        self.deceleration: Parameter = self.add_parameter(
             "deceleration",
             unit="counts/sec2",
             get_cmd=f"MG _DC{self._axis}",
@@ -291,8 +319,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             vals=Multiples(min_value=1024, max_value=1073740800, divisor=1024),
             docstring="deceleration for motor's motion",
         )
+        """deceleration for motor's motion"""
 
-        self.add_parameter(
+        self.off_when_error_occurs: Parameter = self.add_parameter(
             "off_when_error_occurs",
             get_cmd=self._get_off_when_error_occurs,
             set_cmd=self._set_off_when_error_occurs,
@@ -305,8 +334,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             docstring="enables or disables the motor to "
             "automatically turn off when error occurs",
         )
+        """enables or disables the motor to automatically turn off when error occurs"""
 
-        self.add_parameter(
+        self.reverse_sw_limit: Parameter = self.add_parameter(
             "reverse_sw_limit",
             unit="quadrature counts",
             get_cmd=f"MG _BL{self._axis}",
@@ -318,8 +348,9 @@ class GalilDMC4133Motor(InstrumentChannel):
             " default value is -2147483648. this value effectively "
             "disables the reverse limit.",
         )
+        """can be used to set software reverse limit for the motor. motor motion will stop beyond this limit automatically. default value is -2147483648. this value effectively disables the reverse limit."""
 
-        self.add_parameter(
+        self.forward_sw_limit: Parameter = self.add_parameter(
             "forward_sw_limit",
             unit="quadrature counts",
             get_cmd=f"MG _FL{self._axis}",
@@ -331,6 +362,7 @@ class GalilDMC4133Motor(InstrumentChannel):
             " default value is 2147483647. this value effectively "
             "disables the forward limit.",
         )
+        """can be used to set software forward limit for the motor. motor motion will stop beyond this limit automatically. default value is 2147483647. this value effectively disables the forward limit."""
 
     def _set_reverse_sw_limit(self, val: int) -> None:
         """
@@ -449,33 +481,39 @@ class GalilDMC4133Controller(GalilMotionController):
     Driver for Galil DMC-4133 Controller
     """
 
-    def __init__(self, name: str, address: str, **kwargs: Any) -> None:
+    def __init__(
+        self, name: str, address: str, **kwargs: "Unpack[InstrumentBaseKWArgs]"
+    ) -> None:
         """
         Initializes the DMC4133Controller class
 
         Args:
             name: name for the instance
             address: address of the controller burned in
+            **kwargs: kwargs are forwarded to base class.
+
         """
         super().__init__(name=name, address=address, **kwargs)
 
-        self.add_parameter(
+        self.position_format_decimals: Parameter = self.add_parameter(
             "position_format_decimals",
             get_cmd=None,
             set_cmd="PF 10.{}",
             vals=Ints(0, 4),
             docstring="sets number of decimals in the format of the position",
         )
+        """sets number of decimals in the format of the position"""
 
-        self.add_parameter(
+        self.absolute_position: Parameter = self.add_parameter(
             "absolute_position",
             get_cmd=self._get_absolute_position,
             set_cmd=None,
             unit="quadrature counts",
             docstring="gets absolute position of the motors from the set origin",
         )
+        """gets absolute position of the motors from the set origin"""
 
-        self.add_parameter(
+        self.wait: Parameter = self.add_parameter(
             "wait",
             get_cmd=None,
             set_cmd="WT {}",
@@ -485,6 +523,7 @@ class GalilDMC4133Controller(GalilMotionController):
             "time specified before executing the next "
             "command",
         )
+        """controller will wait for the amount of time specified before executing the next command"""
 
         self._set_default_update_time()
         self.add_submodule("motor_a", GalilDMC4133Motor(self, "A"))
@@ -602,14 +641,15 @@ class GalilDMC4133Arm:
 
         Args:
             controller: an instance of DMC4133Controller
+
         """
         self.controller = controller
 
         # initialization (all these points will have values in quadrature
         # counts)
-        self._left_bottom_position: Optional[tuple[int, int, int]] = None
-        self._left_top_position: Optional[tuple[int, int, int]] = None
-        self._right_top_position: Optional[tuple[int, int, int]] = None
+        self._left_bottom_position: tuple[int, int, int] | None = None
+        self._left_top_position: tuple[int, int, int] | None = None
+        self._right_top_position: tuple[int, int, int] | None = None
 
         # motion directions (all these values are in quadrature counts)
         self._a: np.ndarray  # right_top - left_bottom
@@ -624,8 +664,8 @@ class GalilDMC4133Arm:
         self._plane_eqn: np.ndarray
 
         # current vars
-        self._current_row: Optional[int] = None
-        self._current_pad: Optional[int] = None
+        self._current_row: int | None = None
+        self._current_pad: int | None = None
 
         # chip details
         self.rows: int
@@ -643,23 +683,23 @@ class GalilDMC4133Arm:
         self._target: np.ndarray
 
     @property
-    def current_row(self) -> Optional[int]:
+    def current_row(self) -> int | None:
         return self._current_row
 
     @property
-    def current_pad(self) -> Optional[int]:
+    def current_pad(self) -> int | None:
         return self._current_pad
 
     @property
-    def left_bottom_position(self) -> Optional[tuple[int, int, int]]:
+    def left_bottom_position(self) -> tuple[int, int, int] | None:
         return self._left_bottom_position
 
     @property
-    def left_top_position(self) -> Optional[tuple[int, int, int]]:
+    def left_top_position(self) -> tuple[int, int, int] | None:
         return self._left_top_position
 
     @property
-    def right_top_position(self) -> Optional[tuple[int, int, int]]:
+    def right_top_position(self) -> tuple[int, int, int] | None:
         return self._right_top_position
 
     @property
@@ -704,28 +744,24 @@ class GalilDMC4133Arm:
         self._arm_pick_up_distance = _convert_micro_meter_to_quadrature_counts(distance)
 
     def set_left_bottom_position(self) -> None:
-
         pos = self.controller.absolute_position()
         self._left_bottom_position = (pos["A"], pos["B"], pos["C"])
 
         self._calculate_ortho_vector()
 
     def set_left_top_position(self) -> None:
-
         pos = self.controller.absolute_position()
         self._left_top_position = (pos["A"], pos["B"], pos["C"])
 
         self._calculate_ortho_vector()
 
     def set_right_top_position(self) -> None:
-
         pos = self.controller.absolute_position()
         self._right_top_position = (pos["A"], pos["B"], pos["C"])
 
         self._calculate_ortho_vector()
 
     def _calculate_ortho_vector(self) -> None:
-
         if (
             self._left_bottom_position is None
             or self._left_top_position is None
@@ -919,7 +955,6 @@ class GalilDMC4133Arm:
         self.controller.wait_till_motion_complete()
 
     def _pick_up(self) -> None:
-
         self.move_motor_c_by(distance=-20)
         self._setup_motion(
             rel_vec=self._n, d=self._arm_pick_up_distance, speed=self._speed
@@ -927,7 +962,6 @@ class GalilDMC4133Arm:
         self._move()
 
     def _put_down(self) -> None:
-
         motion_vec = -1 * self._n
 
         pos = self.controller.absolute_position()
@@ -945,7 +979,6 @@ class GalilDMC4133Arm:
         self._move()
 
     def move_towards_left_bottom_position(self) -> None:
-
         self._pick_up()
 
         motion_vec = -1 * self._a
@@ -957,7 +990,6 @@ class GalilDMC4133Arm:
         self._current_pad = 1
 
     def move_to_next_row(self) -> None:
-
         if self._current_row is None or self._current_pad is None:
             raise RuntimeError("Current position unknown.")
 
@@ -976,7 +1008,6 @@ class GalilDMC4133Arm:
         self._current_row = self._current_row + 1
 
     def move_to_begin_row_pad_from_end_row_last_pad(self) -> None:
-
         if self._current_row is None or self._current_pad is None:
             raise RuntimeError("Current position unknown.")
 
@@ -998,7 +1029,6 @@ class GalilDMC4133Arm:
         self._current_pad = self._current_pad + 1
 
     def move_to_row(self, num: int) -> None:
-
         if num < 1 or num > self.rows:
             raise RuntimeError(
                 f"Row num: {num} is out of range. Row numbers start from 1 "
@@ -1028,7 +1058,6 @@ class GalilDMC4133Arm:
         self._current_row = num
 
     def move_to_pad(self, num: int) -> None:
-
         if num < 1 or num > self.pads:
             raise RuntimeError(
                 f"Pad num: {num} is out of range. Pad number start from 1 "
@@ -1058,38 +1087,31 @@ class GalilDMC4133Arm:
         self._current_pad = num
 
     def set_motor_a_forward_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_a.forward_sw_limit(pos["A"])
 
     def set_motor_a_reverse_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_a.reverse_sw_limit(pos["A"])
 
     def set_motor_b_forward_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_b.forward_sw_limit(pos["B"])
 
     def set_motor_b_reverse_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_b.reverse_sw_limit(pos["B"])
 
     def set_motor_c_forward_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_c.forward_sw_limit(pos["C"])
 
     def set_motor_c_reverse_limit(self) -> None:
-
         pos = self.controller.absolute_position()
         self.controller.motor_c.reverse_sw_limit(pos["C"])
 
 
 def _convert_micro_meter_to_quadrature_counts(val: float) -> int:
-
     return int(20 * val)
 
 

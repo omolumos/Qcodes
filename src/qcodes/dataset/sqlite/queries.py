@@ -2,6 +2,7 @@
 This module contains useful SQL queries and their combinations which are
 specific to the domain of QCoDeS database.
 """
+
 from __future__ import annotations
 
 import logging
@@ -9,9 +10,8 @@ import sqlite3
 import time
 import unicodedata
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
 from itertools import zip_longest
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -48,6 +48,9 @@ from qcodes.dataset.sqlite.query_helpers import (
     update_where,
 )
 from qcodes.utils import list_of_data_to_maybe_ragged_nd_array
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +101,7 @@ def is_run_id_in_database(conn: ConnectionPlus, *run_ids: int) -> dict[int, bool
     Returns:
         a dict with the run_ids as keys and bools as values. True means that
         the run_id DOES exist in the database
+
     """
     run_ids = tuple(np.unique(run_ids))
     placeholders = sql_placeholder_string(len(run_ids))
@@ -149,6 +153,7 @@ def get_parameter_data(
         end: end of range; if None, then ends at the bottom of the table
         callback: Function called during the data loading every
             config.dataset.callback_percent.
+
     """
     rundescriber = get_rundescriber_from_result_table_name(conn, table_name)
 
@@ -198,23 +203,24 @@ def get_shaped_parameter_data_for_one_paramtree(
                 if total_data_shape == total_len_shape:
                     one_param_output[name] = paramdata.reshape(shape)
                 elif total_data_shape > total_len_shape:
-                    log.warning(f"Tried to set data shape for {name} in "
-                                f"dataset {output_param} "
-                                f"from metadata when "
-                                f"loading but found inconsistent lengths "
-                                f"{total_data_shape} and {total_len_shape}")
+                    log.warning(
+                        f"Tried to set data shape for {name} in "
+                        f"dataset {output_param} "
+                        f"from metadata when "
+                        f"loading but found inconsistent lengths "
+                        f"{total_data_shape} and {total_len_shape}"
+                    )
     return one_param_output
 
 
 def get_rundescriber_from_result_table_name(
-        conn: ConnectionPlus,
-        result_table_name: str
+    conn: ConnectionPlus, result_table_name: str
 ) -> RunDescriber:
     sql = """
     SELECT run_id FROM runs WHERE result_table_name = ?
     """
     c = atomic_transaction(conn, sql, result_table_name)
-    run_id = one(c, 'run_id')
+    run_id = one(c, "run_id")
     rd = serial.from_json_to_current(get_run_description(conn, run_id))
     return rd
 
@@ -233,8 +239,10 @@ def get_parameter_data_for_one_paramtree(
         conn, table_name, interdeps, output_param, start, end, callback
     )
     if not paramspecs[0].name == output_param:
-        raise ValueError("output_param should always be the first "
-                         "parameter in a parameter tree. It is not")
+        raise ValueError(
+            "output_param should always be the first "
+            "parameter in a parameter tree. It is not"
+        )
     _expand_data_to_arrays(data, paramspecs)
 
     param_data = {}
@@ -267,11 +275,9 @@ def _expand_data_to_arrays(
     types = [param.type for param in paramspecs]
     # if we have array type parameters expand all other parameters
     # to arrays
-    if 'array' in types:
-
-        if ('numeric' in types or 'text' in types
-                or 'complex' in types):
-            first_array_element = types.index('array')
+    if "array" in types:
+        if "numeric" in types or "text" in types or "complex" in types:
+            first_array_element = types.index("array")
             types_mapping: dict[int, Callable[[str], np.dtype[Any]]] = {}
             for i, x in enumerate(types):
                 if x == "numeric":
@@ -360,6 +366,7 @@ def get_parameter_db_row(conn: ConnectionPlus, table_name: str, param_name: str)
 
     Returns:
         The total number of not-null values
+
     """
     sql = f"""
            SELECT COUNT({param_name}) FROM "{table_name}"
@@ -380,6 +387,7 @@ def get_table_max_id(conn: ConnectionPlus, table_name: str) -> int:
 
     Returns:
         The max id of a table
+
     """
     sql = f"""
            SELECT MAX(id)
@@ -410,6 +418,7 @@ def _get_offset_limit_for_callback(
             config.dataset.callback_percent
         limit: SQL limit corresponding to a progress of
             config.dataset.callback_percent
+
     """
 
     # First, we get the number of row to be downloaded for the wanted
@@ -422,7 +431,6 @@ def _get_offset_limit_for_callback(
     # Third, we create a list of offset corresponding to a progress of
     # config.dataset.callback_percent
     if nb_row >= 100:
-
         # Using linspace with dtype=int ensure of having an array finishing
         # by max_id
         offset: npt.NDArray[np.int32] = np.linspace(
@@ -475,6 +483,7 @@ def get_parameter_tree_values(
     Returns:
         A list of list. The outer list index is row number, the inner list
         index is parameter value (first toplevel_param, then other_param_names)
+
     """
 
     cursor = conn.cursor()
@@ -506,7 +515,6 @@ def get_parameter_tree_values(
 
     # Request if no callback
     if callback is None:
-
         cursor.execute(sql, (limit, offset))
         res = many_many(cursor, *columns)
 
@@ -536,8 +544,9 @@ def get_parameter_tree_values(
     return res
 
 
-def get_runid_from_expid_and_counter(conn: ConnectionPlus, exp_id: int,
-                                     counter: int) -> int:
+def get_runid_from_expid_and_counter(
+    conn: ConnectionPlus, exp_id: int, counter: int
+) -> int:
     """
     Get the run_id of a run in the specified experiment with the specified
     counter
@@ -546,6 +555,7 @@ def get_runid_from_expid_and_counter(conn: ConnectionPlus, exp_id: int,
         conn: connection to the database
         exp_id: the exp_id of the experiment containing the run
         counter: the intra-experiment run counter of that run
+
     """
     sql = """
           SELECT run_id
@@ -554,7 +564,7 @@ def get_runid_from_expid_and_counter(conn: ConnectionPlus, exp_id: int,
           exp_id = ?
           """
     c = transaction(conn, sql, counter, exp_id)
-    run_id = one(c, 'run_id')
+    run_id = one(c, "run_id")
     return run_id
 
 
@@ -569,6 +579,7 @@ def get_guid_from_expid_and_counter(
         conn: connection to the database
         exp_id: the exp_id of the experiment containing the run
         counter: the intra-experiment run counter of that run
+
     """
     sql = """
           SELECT guid
@@ -594,6 +605,7 @@ def get_runid_from_guid(conn: ConnectionPlus, guid: str) -> int | None:
 
     Raises:
         RuntimeError if more than one run with the given GUID exists
+
     """
     query = """
             SELECT run_id
@@ -606,9 +618,11 @@ def get_runid_from_guid(conn: ConnectionPlus, guid: str) -> int | None:
     if len(rows) == 0:
         run_id = None
     elif len(rows) > 1:
-        errormssg = ('Critical consistency error: multiple runs with'
-                     f' the same GUID found! {len(rows)} runs have GUID '
-                     f'{guid}')
+        errormssg = (
+            "Critical consistency error: multiple runs with"
+            f" the same GUID found! {len(rows)} runs have GUID "
+            f"{guid}"
+        )
         log.critical(errormssg)
         raise RuntimeError(errormssg)
     else:
@@ -640,6 +654,7 @@ def _query_guids_from_run_spec(
 
     Returns:
         A list of the GUIDs matching the supplied specifications.
+
     """
     # first find all experiments that match the given sample
     # and experiment name
@@ -647,11 +662,10 @@ def _query_guids_from_run_spec(
     exp_ids: list[int] | None
     if experiment_name is not None or sample_name is not None:
         if sample_name is not None:
-            exp_query['sample_name'] = sample_name
+            exp_query["sample_name"] = sample_name
         if experiment_name is not None:
-            exp_query['name'] = experiment_name
-        exp_ids = get_matching_exp_ids(conn,
-                                       **exp_query)
+            exp_query["name"] = experiment_name
+        exp_ids = get_matching_exp_ids(conn, **exp_query)
         if exp_ids == []:
             return []
     else:
@@ -684,7 +698,7 @@ def _query_guids_from_run_spec(
     else:
         cursor.execute(query)
 
-    return [guid for guid, in cursor.fetchall()]
+    return [guid for (guid,) in cursor.fetchall()]
 
 
 def _get_layout_id(
@@ -697,6 +711,7 @@ def _get_layout_id(
         conn: The database connection
         parameter: A ParamSpec or the name of the parameter
         run_id: The run_id of the run in question
+
     """
     # get the parameter layout id
     sql = """
@@ -710,11 +725,13 @@ def _get_layout_id(
     elif isinstance(parameter, str):
         name = parameter
     else:
-        raise ValueError('Wrong parameter type, must be ParamSpec or str, '
-                         f'received {type(parameter)}.')
+        raise ValueError(
+            "Wrong parameter type, must be ParamSpec or str, "
+            f"received {type(parameter)}."
+        )
 
     c = atomic_transaction(conn, sql, name, run_id)
-    res = one(c, 'layout_id')
+    res = one(c, "layout_id")
 
     return res
 
@@ -729,7 +746,7 @@ def _get_dependents(conn: ConnectionPlus, run_id: int) -> list[int]:
     WHERE run_id=? and layout_id in (SELECT dependent FROM dependencies)
     """
     c = atomic_transaction(conn, sql, run_id)
-    res = [layout_id for layout_id, in many_many(c, "layout_id")]
+    res = [layout_id for (layout_id,) in many_many(c, "layout_id")]
     return res
 
 
@@ -741,6 +758,7 @@ def _get_dependencies(conn: ConnectionPlus, layout_id: int) -> list[tuple[int, i
     Args:
         conn: connection to the database
         layout_id: the layout_id of the dependent variable
+
     """
     sql = """
     SELECT independent, axis_num FROM dependencies WHERE dependent=?
@@ -776,6 +794,7 @@ def new_experiment(
 
     Returns:
         id: row-id of the created experiment
+
     """
     query = """
             INSERT INTO experiments
@@ -835,14 +854,14 @@ def mark_run_complete(
 
 
 def completed(conn: ConnectionPlus, run_id: int) -> bool:
-    """ Check if the run is complete
+    """Check if the run is complete
 
     Args:
         conn: database connection
         run_id: id of the run to check
+
     """
-    return bool(select_one_where(conn, "runs", "is_completed",
-                                 "run_id", run_id))
+    return bool(select_one_where(conn, "runs", "is_completed", "run_id", run_id))
 
 
 def get_completed_timestamp_from_run_id(
@@ -860,6 +879,7 @@ def get_completed_timestamp_from_run_id(
 
     Returns:
         timestamp in seconds since the Epoch, or None
+
     """
     ts = select_one_where(conn, "runs", "completed_timestamp", "run_id", run_id)
     # sometimes it happens that the timestamp is written to DB as an int
@@ -879,6 +899,7 @@ def get_guid_from_run_id(conn: ConnectionPlus, run_id: int) -> str | None:
 
     Returns:
         The guid of the run_id.
+
     """
     try:
         guid = select_one_where(conn, "runs", "guid", "run_id", run_id)
@@ -901,6 +922,7 @@ def get_guids_from_multiple_run_ids(
 
     Returns:
         A list of guids for the supplied run_ids.
+
     """
 
     guids: list[str] = []
@@ -916,11 +938,12 @@ def get_guids_from_multiple_run_ids(
 
 
 def finish_experiment(conn: ConnectionPlus, exp_id: int) -> None:
-    """ Finish experiment
+    """Finish experiment
 
     Args:
         conn: database connection
         exp_id: the id of the experiment
+
     """
     query = """
     UPDATE experiments SET end_time=? WHERE exp_id=?;
@@ -929,7 +952,7 @@ def finish_experiment(conn: ConnectionPlus, exp_id: int) -> None:
 
 
 def get_run_counter(conn: ConnectionPlus, exp_id: int) -> int:
-    """ Get the experiment run counter
+    """Get the experiment run counter
 
     Args:
         conn: the connection to the sqlite database
@@ -949,17 +972,20 @@ def get_run_counter(conn: ConnectionPlus, exp_id: int) -> int:
 
 
 def get_experiments(conn: ConnectionPlus) -> list[int]:
-    """Get a list of experiments
+    """
+    Get a list of experiments
+
     Args:
         conn: database connection
 
-     Returns:
-         list of rows
+    Returns:
+        list of rows
+
     """
     sql = "SELECT exp_id FROM experiments"
     c = atomic_transaction(conn, sql)
 
-    return [exp_id for exp_id, in c.fetchall()]
+    return [exp_id for (exp_id,) in c.fetchall()]
 
 
 def get_matching_exp_ids(conn: ConnectionPlus, **match_conditions: Any) -> list[int]:
@@ -969,18 +995,25 @@ def get_matching_exp_ids(conn: ConnectionPlus, **match_conditions: Any) -> list[
     Raises:
         ValueError if a match_condition that is not "name", "sample_name",
         "format_string", "run_counter", "start_time", or "end_time"
+
     """
-    valid_conditions = ["name", "sample_name", "start_time", "end_time",
-                        "run_counter", "format_string"]
+    valid_conditions = [
+        "name",
+        "sample_name",
+        "start_time",
+        "end_time",
+        "run_counter",
+        "format_string",
+    ]
 
     for mcond in match_conditions:
         if mcond not in valid_conditions:
             raise ValueError(f"{mcond} is not a valid match condition.")
 
-    end_time = match_conditions.get('end_time', None)
+    end_time = match_conditions.get("end_time", None)
     time_eq = "=" if end_time is not None else "IS"
 
-    sample_name = match_conditions.get('sample_name', None)
+    sample_name = match_conditions.get("sample_name", None)
     sample_name_eq = "=" if sample_name is not None else "IS"
 
     query = "SELECT exp_id FROM experiments "
@@ -993,15 +1026,14 @@ def get_matching_exp_ids(conn: ConnectionPlus, **match_conditions: Any) -> list[
     # now some syntax clean-up
     if "format_string" in match_conditions:
         format_string = match_conditions["format_string"]
-        query = query.replace("format_string = ?",
-                              f'format_string = "{format_string}"')
+        query = query.replace("format_string = ?", f'format_string = "{format_string}"')
         match_conditions.pop("format_string")
     query = query.replace("end_time = ?", f"end_time {time_eq} ?")
     query = query.replace("sample_name = ?", f"sample_name {sample_name_eq} ?")
 
     cursor = conn.execute(query, tuple(match_conditions.values()))
 
-    return [exp_id for exp_id, in cursor.fetchall()]
+    return [exp_id for (exp_id,) in cursor.fetchall()]
 
 
 def get_exp_ids_from_run_ids(conn: ConnectionPlus, run_ids: Sequence[int]) -> list[int]:
@@ -1014,6 +1046,7 @@ def get_exp_ids_from_run_ids(conn: ConnectionPlus, run_ids: Sequence[int]) -> li
 
     Returns:
         A list of exp_ids matching the run_ids
+
     """
     sql_placeholders = sql_placeholder_string(len(run_ids))
     exp_id_query = f"""
@@ -1049,19 +1082,20 @@ def get_runs(conn: ConnectionPlus, exp_id: int | None = None) -> list[int]:
 
     Returns:
         list of rows
+
     """
-    with atomic(conn) as conn:
+    with atomic(conn) as atomic_conn:
         if exp_id:
             sql = """
             SELECT run_id FROM runs
             WHERE exp_id = ?
             """
-            c = transaction(conn, sql, exp_id)
+            c = transaction(atomic_conn, sql, exp_id)
         else:
             sql = "SELECT run_id FROM runs"
-            c = transaction(conn, sql)
+            c = transaction(atomic_conn, sql)
 
-    return [run_id for run_id, in c.fetchall()]
+    return [run_id for (run_id,) in c.fetchall()]
 
 
 def get_last_run(conn: ConnectionPlus, exp_id: int | None = None) -> int | None:
@@ -1076,6 +1110,7 @@ def get_last_run(conn: ConnectionPlus, exp_id: int | None = None) -> int | None:
     Returns:
         the integer id of the last run or None if there are not runs in the
         experiment
+
     """
     if exp_id is not None:
         query = """
@@ -1090,7 +1125,7 @@ def get_last_run(conn: ConnectionPlus, exp_id: int | None = None) -> int | None:
             FROM runs
             """
         c = atomic_transaction(conn, query)
-    return one(c, 'run_id')
+    return one(c, "run_id")
 
 
 def run_exists(conn: ConnectionPlus, run_id: int) -> bool:
@@ -1108,8 +1143,7 @@ def run_exists(conn: ConnectionPlus, run_id: int) -> bool:
     return bool(res[0])
 
 
-def format_table_name(fmt_str: str, name: str, exp_id: int,
-                      run_counter: int) -> str:
+def format_table_name(fmt_str: str, name: str, exp_id: int, run_counter: int) -> str:
     """
     Format the format_string into a table name
 
@@ -1118,6 +1152,7 @@ def format_table_name(fmt_str: str, name: str, exp_id: int,
         name: the run name
         exp_id: the experiment ID
         run_counter: the intra-experiment runnumber of this run
+
     """
     table_name = fmt_str.format(name, exp_id, run_counter)
     _validate_table_name(table_name)  # raises if table_name not valid
@@ -1134,14 +1169,15 @@ def _insert_run(
     parent_dataset_links: str = "[]",
     description: RunDescriber | None = None,
 ) -> tuple[int, str, int]:
-
     # get run counter and formatter from experiments
-    run_counter, format_string = select_many_where(conn,
-                                                   "experiments",
-                                                   "run_counter",
-                                                   "format_string",
-                                                   where_column="exp_id",
-                                                   where_value=exp_id)
+    run_counter, format_string = select_many_where(
+        conn,
+        "experiments",
+        "run_counter",
+        "format_string",
+        where_column="exp_id",
+        where_value=exp_id,
+    )
     assert isinstance(run_counter, int)
     assert isinstance(format_string, str)
     newly_created_run = False
@@ -1156,7 +1192,7 @@ def _insert_run(
     run_counter += 1
     if captured_counter is None:
         newly_created_run = True
-        with atomic(conn) as conn:
+        with atomic(conn) as atomic_conn:
             query = """
             SELECT
                 max(result_counter)
@@ -1164,7 +1200,7 @@ def _insert_run(
                 runs
             WHERE
                 exp_id = ?"""
-            curr = transaction(conn, query, exp_id)
+            curr = transaction(atomic_conn, query, exp_id)
             existing_captured_counter = one(curr, 0)
             if existing_captured_counter is not None:
                 captured_counter = existing_captured_counter + 1
@@ -1172,13 +1208,13 @@ def _insert_run(
                 captured_counter = run_counter
 
     if captured_run_id is None:
-        with atomic(conn) as conn:
+        with atomic(conn) as atomic_conn:
             query = """
             SELECT
                 max(run_id)
             FROM
                 runs"""
-            curr = transaction(conn, query)
+            curr = transaction(atomic_conn, query)
             existing_captured_run_id = one(curr, 0)
         if existing_captured_run_id is not None:
             captured_run_id = existing_captured_run_id + 1
@@ -1198,8 +1234,7 @@ def _insert_run(
     # specifically dependencies should come before the dependent parameters for links
     # in the layout table to work correctly
 
-    with atomic(conn) as conn:
-
+    with atomic(conn) as atomic_conn:
         if legacy_param_specs:
             query = f"""
             INSERT INTO {table}
@@ -1219,7 +1254,7 @@ def _insert_run(
                 (?,?,?,?,?,?,?,?,?,?,?,?)
             """
             curr = transaction(
-                conn,
+                atomic_conn,
                 query,
                 name,
                 exp_id,
@@ -1238,7 +1273,7 @@ def _insert_run(
             if run_id is None:
                 raise RuntimeError(f"Creation of run with guid: {guid} failed")
 
-            _add_parameters_to_layout_and_deps(conn, run_id, *legacy_param_specs)
+            _add_parameters_to_layout_and_deps(atomic_conn, run_id, *legacy_param_specs)
 
         else:
             query = f"""
@@ -1257,18 +1292,21 @@ def _insert_run(
             VALUES
                 (?,?,?,?,?,?,?,?,?,?,?)
             """
-            curr = transaction(conn, query,
-                               name,
-                               exp_id,
-                               guid,
-                               formatted_name,
-                               run_counter,
-                               None,
-                               False,
-                               desc_str,
-                               captured_run_id,
-                               captured_counter,
-                               parent_dataset_links)
+            curr = transaction(
+                conn,
+                query,
+                name,
+                exp_id,
+                guid,
+                formatted_name,
+                run_counter,
+                None,
+                False,
+                desc_str,
+                captured_run_id,
+                captured_counter,
+                parent_dataset_links,
+            )
 
     run_id = curr.lastrowid
     if run_id is None:
@@ -1285,8 +1323,9 @@ def _insert_run(
     return run_counter, formatted_name, run_id
 
 
-def _update_experiment_run_counter(conn: ConnectionPlus, exp_id: int,
-                                   run_counter: int) -> None:
+def _update_experiment_run_counter(
+    conn: ConnectionPlus, exp_id: int, run_counter: int
+) -> None:
     query = """
     UPDATE experiments
     SET run_counter = ?
@@ -1305,6 +1344,7 @@ def _get_parameters(conn: ConnectionPlus, run_id: int) -> list[ParamSpec]:
 
     Returns:
         A list of param specs for this run
+
     """
 
     sql = """
@@ -1314,13 +1354,11 @@ def _get_parameters(conn: ConnectionPlus, run_id: int) -> list[ParamSpec]:
     c = conn.execute(sql, (run_id,))
     return [
         _get_paramspec(conn, run_id, param_name)
-        for param_name, in many_many(c, "parameter")
+        for (param_name,) in many_many(c, "parameter")
     ]
 
 
-def _get_paramspec(conn: ConnectionPlus,
-                   run_id: int,
-                   param_name: str) -> ParamSpec:
+def _get_paramspec(conn: ConnectionPlus, run_id: int, param_name: str) -> ParamSpec:
     """
     Get the ParamSpec object for the given parameter name
     in the given run
@@ -1329,6 +1367,7 @@ def _get_paramspec(conn: ConnectionPlus,
         conn: Connection to the database
         run_id: The run id
         param_name: The name of the parameter
+
     """
 
     # get table name
@@ -1337,7 +1376,7 @@ def _get_paramspec(conn: ConnectionPlus,
     WHERE run_id = ?
     """
     c = conn.execute(sql, (run_id,))
-    result_table_name = one(c, 'result_table_name')
+    result_table_name = one(c, "result_table_name")
 
     # get the data type
     sql = f"""
@@ -1363,7 +1402,7 @@ def _get_paramspec(conn: ConnectionPlus,
     )
 
     if inferred_from_string:
-        inferred_from = inferred_from_string.split(', ')
+        inferred_from = inferred_from_string.split(", ")
     else:
         inferred_from = []
 
@@ -1381,17 +1420,14 @@ def _get_paramspec(conn: ConnectionPlus,
             WHERE layout_id = ?
             """
             c = conn.execute(sql, (dp,))
-            depends_on.append(one(c, 'parameter'))
+            depends_on.append(one(c, "parameter"))
 
     assert param_type is not None
-    parspec = ParamSpec(param_name, param_type, label, unit,
-                        inferred_from,
-                        depends_on)
+    parspec = ParamSpec(param_name, param_type, label, unit, inferred_from, depends_on)
     return parspec
 
 
-def update_run_description(conn: ConnectionPlus, run_id: int,
-                           description: str) -> None:
+def update_run_description(conn: ConnectionPlus, run_id: int, description: str) -> None:
     """
     Update the run_description field for the given run_id. The description
     string must be a valid JSON string representation of a RunDescriber object
@@ -1399,14 +1435,17 @@ def update_run_description(conn: ConnectionPlus, run_id: int,
     try:
         serial.from_json_to_current(description)
     except Exception as e:
-        raise ValueError("Invalid description string. Must be a JSON string "
-                         "representation of a RunDescriber object.") from e
+        raise ValueError(
+            "Invalid description string. Must be a JSON string "
+            "representation of a RunDescriber object."
+        ) from e
 
     _update_run_description(conn, run_id, description)
 
 
-def _update_run_description(conn: ConnectionPlus, run_id: int,
-                            description: str) -> None:
+def _update_run_description(
+    conn: ConnectionPlus, run_id: int, description: str
+) -> None:
     """
     Update the run_description field for the given run_id. The description
     string is NOT validated.
@@ -1416,25 +1455,24 @@ def _update_run_description(conn: ConnectionPlus, run_id: int,
           SET run_description = ?
           WHERE run_id = ?
           """
-    with atomic(conn) as conn:
-        conn.cursor().execute(sql, (description, run_id))
+    with atomic(conn) as atomic_conn:
+        atomic_conn.cursor().execute(sql, (description, run_id))
 
 
-def update_parent_datasets(conn: ConnectionPlus,
-                           run_id: int, links_str: str) -> None:
+def update_parent_datasets(conn: ConnectionPlus, run_id: int, links_str: str) -> None:
     """
     Update (i.e. overwrite) the parent_datasets field for the given run_id
     """
-    if not is_column_in_table(conn, 'runs', 'parent_datasets'):
-        insert_column(conn, 'runs', 'parent_datasets')
+    if not is_column_in_table(conn, "runs", "parent_datasets"):
+        insert_column(conn, "runs", "parent_datasets")
 
     sql = """
           UPDATE runs
           SET parent_datasets = ?
           WHERE run_id = ?
           """
-    with atomic(conn) as conn:
-        conn.cursor().execute(sql, (links_str, run_id))
+    with atomic(conn) as atomic_conn:
+        atomic_conn.cursor().execute(sql, (links_str, run_id))
 
 
 def set_run_timestamp(
@@ -1449,6 +1487,7 @@ def set_run_timestamp(
         run_id: id of the run to mark complete
         timestamp: time stamp for completion. If None the function will
             automatically get the current time.
+
     """
 
     query = """
@@ -1462,8 +1501,8 @@ def set_run_timestamp(
           WHERE run_id = ?
           """
 
-    with atomic(conn) as conn:
-        c = conn.cursor()
+    with atomic(conn) as atomic_conn:
+        c = atomic_conn.cursor()
         old_timestamp = one(c.execute(query, (run_id,)), "run_timestamp")
         if old_timestamp is not None:
             raise RuntimeError(
@@ -1496,35 +1535,35 @@ def add_parameter(
         insert_into_results_table: Should the parameters be added as columns to the
            results table?
         parameter: the list of ParamSpecs for parameters to add
-    """
-    with atomic(conn) as conn:
 
+    """
+    with atomic(conn) as atomic_conn:
         sql = "SELECT result_table_name FROM runs WHERE run_id=?"
-        formatted_name = one(transaction(conn, sql, run_id), "result_table_name")
+        formatted_name = one(transaction(atomic_conn, sql, run_id), "result_table_name")
 
         p_names = []
         for p in parameter:
             if insert_into_results_table:
-                insert_column(conn, formatted_name, p.name, p.type)
+                insert_column(atomic_conn, formatted_name, p.name, p.type)
             p_names.append(p.name)
         # get old parameters column from run table
         sql = """
         SELECT parameters FROM runs
         WHERE run_id=?
         """
-        with atomic(conn) as conn:
-            c = transaction(conn, sql, run_id)
-        old_parameters = one(c, 'parameters')
+        with atomic(atomic_conn) as atomic_conn_1:
+            c = transaction(atomic_conn_1, sql, run_id)
+        old_parameters = one(c, "parameters")
         if old_parameters:
             new_parameters = ",".join([old_parameters] + p_names)
         else:
             new_parameters = ",".join(p_names)
         sql = "UPDATE runs SET parameters=? WHERE run_id=?"
-        with atomic(conn) as conn:
-            transaction(conn, sql, new_parameters, run_id)
+        with atomic(atomic_conn) as atomic_conn_1:
+            transaction(atomic_conn_1, sql, new_parameters, run_id)
 
         # Update the layouts table
-        c = _add_parameters_to_layout_and_deps(conn, run_id, *parameter)
+        c = _add_parameters_to_layout_and_deps(atomic_conn, run_id, *parameter)
 
 
 def _add_parameters_to_layout_and_deps(
@@ -1537,39 +1576,36 @@ def _add_parameters_to_layout_and_deps(
         layout_args.append(p.label)
         layout_args.append(p.unit)
         layout_args.append(p.inferred_from)
-    rowplaceholder = '(?, ?, ?, ?, ?)'
-    placeholder = ','.join([rowplaceholder] * len(parameter))
+    rowplaceholder = "(?, ?, ?, ?, ?)"
+    placeholder = ",".join([rowplaceholder] * len(parameter))
     sql = f"""
     INSERT INTO layouts (run_id, parameter, label, unit, inferred_from)
     VALUES {placeholder}
     """
 
-    with atomic(conn) as conn:
-        c = transaction(conn, sql, *layout_args)
+    with atomic(conn) as atomic_conn:
+        c = transaction(atomic_conn, sql, *layout_args)
 
         for p in parameter:
+            if p.depends_on != "":
+                layout_id = _get_layout_id(atomic_conn, p, run_id)
 
-            if p.depends_on != '':
-
-                layout_id = _get_layout_id(conn, p, run_id)
-
-                deps = p.depends_on.split(', ')
+                deps = p.depends_on.split(", ")
                 for ax_num, dp in enumerate(deps):
-
                     sql = """
                     SELECT layout_id FROM layouts
                     WHERE run_id=? and parameter=?;
                     """
 
-                    c = transaction(conn, sql, run_id, dp)
-                    dep_ind = one(c, 'layout_id')
+                    c = transaction(atomic_conn, sql, run_id, dp)
+                    dep_ind = one(c, "layout_id")
 
                     sql = """
                     INSERT INTO dependencies (dependent, independent, axis_num)
                     VALUES (?,?,?)
                     """
 
-                    c = transaction(conn, sql, layout_id, dep_ind, ax_num)
+                    c = transaction(atomic_conn, sql, layout_id, dep_ind, ax_num)
     return c
 
 
@@ -1593,11 +1629,13 @@ def _create_run_table(
     Args:
         conn: database connection
         formatted_name: the name of the table to create
+        parameters: Parameters to insert in the table.
+        values: Values for the parameters above.
+
     """
     _validate_table_name(formatted_name)
 
-    with atomic(conn) as conn:
-
+    with atomic(conn) as atomic_conn:
         if parameters and values:
             _parameters = ",".join(p.sql_repr() for p in parameters)
             query = f"""
@@ -1606,10 +1644,11 @@ def _create_run_table(
                 {_parameters}
             );
             """
-            transaction(conn, query)
+            transaction(atomic_conn, query)
             # now insert values
-            insert_values(conn, formatted_name,
-                          [p.name for p in parameters], values)
+            insert_values(
+                atomic_conn, formatted_name, [p.name for p in parameters], values
+            )
         elif parameters:
             _parameters = ",".join(p.sql_repr() for p in parameters)
             query = f"""
@@ -1618,14 +1657,14 @@ def _create_run_table(
                 {_parameters}
             );
             """
-            transaction(conn, query)
+            transaction(atomic_conn, query)
         else:
             query = f"""
             CREATE TABLE "{formatted_name}" (
                 id INTEGER PRIMARY KEY
             );
             """
-            transaction(conn, query)
+            transaction(atomic_conn, query)
 
 
 def create_run(
@@ -1652,28 +1691,30 @@ def create_run(
     Note that it is an error to supply both Parameters and RunDescriber
 
     Args:
-        - conn: the connection to the sqlite database
-        - exp_id: the experiment id we want to create the run into
-        - name: a friendly name for this run
-        - guid: the guid adhering to our internal guid format
-        - parameters: optional list of parameters this run has (as ParamSpec objects).
-            This is not recommended, please use description instead.
-        - values:  optional list of values for the parameters
-        - metadata: optional metadata dictionary
-        - captured_run_id: The run_id this data was originally captured with.
+        conn: the connection to the sqlite database
+        exp_id: the experiment id we want to create the run into
+        name: a friendly name for this run
+        guid: the guid adhering to our internal guid format
+        parameters: optional list of parameters this run has (as ParamSpec objects).
+           This is not recommended, please use description instead.
+        values:  optional list of values for the parameters
+        metadata: optional metadata dictionary
+        captured_run_id: The run_id this data was originally captured with.
             Should only be supplied when inserting an already completed run
             from another database into this database. Otherwise leave as None.
-        - captured_counter: The counter this data was originally captured with.
+        captured_counter: The counter this data was originally captured with.
             Should only be supplied when inserting an already completed run
             from another database into this database. Otherwise leave as None.
-        - create_run_table: Should we create a table to insert the run into.
-        - snapshot_raw: Raw string of the snapshot to add to the run.
-        - description: An optional RunDescriber
+        parent_dataset_links: A JSON string of the parent-child dataset links for the run.
+        create_run_table: Should we create a table to insert the run into.
+        snapshot_raw: Raw string of the snapshot to add to the run.
+        description: An optional RunDescriber
 
     Returns:
-        - run_counter: the id of the newly created run (not unique)
-        - run_id: the row id of the newly created run
-        - formatted_name: the name of the newly created table
+        run_counter: the id of the newly created run (not unique)
+        run_id: the row id of the newly created run
+        formatted_name: the name of the newly created table
+
     """
     formatted_name: str | None
 
@@ -1713,6 +1754,12 @@ def create_run(
             )
         else:
             formatted_name = None
+    log.info(
+        "Created run with guid: %s in database %s",
+        guid,
+        conn.path_to_dbfile,
+        extra={"qcodes_guid": guid, "path_to_db": conn.path_to_dbfile},
+    )
     return run_counter, run_id, formatted_name
 
 
@@ -1737,7 +1784,7 @@ def get_parent_dataset_links(conn: ConnectionPlus, run_id: int) -> str:
     link_str: str
     maybe_link_str: str | None
 
-    if not is_column_in_table(conn, 'runs', 'parent_datasets'):
+    if not is_column_in_table(conn, "runs", "parent_datasets"):
         maybe_link_str = None
     else:
         maybe_mayby_link_str = select_one_where(
@@ -1817,6 +1864,7 @@ def validate_dynamic_column_data(data: Mapping[str, Any]) -> None:
 
     Args:
         data: the metadata mapping (tags to values)
+
     """
     for tag, val in data.items():
         if not tag.isidentifier():
@@ -1839,10 +1887,11 @@ def insert_data_in_dynamic_columns(
     (i.e. contain only alphanumeric characters and underscores).
 
     Args:
-        - conn: the connection to the sqlite database
-        - row_id: the row to add the metadata at
-        - table_name: the table to add to, defaults to runs
-        - data: A mapping from columns to data to add
+        conn: the connection to the sqlite database
+        row_id: the row to add the metadata at
+        table_name: the table to add to, defaults to runs
+        data: A mapping from columns to data to add
+
     """
     validate_dynamic_column_data(data)
     for key in data.keys():
@@ -1857,10 +1906,11 @@ def update_columns(
     Updates data in columns matching the given keys (they must exist already)
 
     Args:
-        - conn: the connection to the sqlite database
-        - row_id: the row to add the metadata at
-        - table_name: the table to add to, defaults to runs
-        - data: the data to add
+        conn: the connection to the sqlite database
+        row_id: the row to add the metadata at
+        table_name: the table to add to, defaults to runs
+        data: the data to add
+
     """
     validate_dynamic_column_data(data)
     update_where(conn, table_name, "rowid", row_id, **data)
@@ -1878,10 +1928,11 @@ def add_data_to_dynamic_columns(
     alphanumeric characters and underscores).
 
     Args:
-        - conn: the connection to the sqlite database
-        - row_id: the row to add the metadata at
-        - data: the data to add
-        - table_name: the table to add to, defaults to runs
+        conn: the connection to the sqlite database
+        row_id: the row to add the metadata at
+        data: the data to add
+        table_name: the table to add to, defaults to runs
+
     """
     try:
         insert_data_in_dynamic_columns(conn, row_id, table_name, data)
@@ -1926,22 +1977,26 @@ def update_GUIDs(conn: ConnectionPlus) -> None:
     are zero are skipped.
     """
 
-    log.info('Commencing update of all GUIDs in database')
+    log.info("Commencing update of all GUIDs in database")
 
     cfg = qc.config
 
-    location = cfg['GUID_components']['location']
-    work_station = cfg['GUID_components']['work_station']
+    location = cfg["GUID_components"]["location"]
+    work_station = cfg["GUID_components"]["work_station"]
 
     if location == 0:
-        log.warning('The location is still set to the default (0). Can not '
-                    'proceed. Please configure the location before updating '
-                    'the GUIDs.')
+        log.warning(
+            "The location is still set to the default (0). Can not "
+            "proceed. Please configure the location before updating "
+            "the GUIDs."
+        )
         return
     if work_station == 0:
-        log.warning('The work_station is still set to the default (0). Can not'
-                    ' proceed. Please configure the location before updating '
-                    'the GUIDs.')
+        log.warning(
+            "The work_station is still set to the default (0). Can not"
+            " proceed. Please configure the location before updating "
+            "the GUIDs."
+        )
         return
 
     query = "select MAX(run_id) from runs"
@@ -1951,31 +2006,35 @@ def update_GUIDs(conn: ConnectionPlus) -> None:
     # now, there are four actions we can take
 
     def _both_nonzero(run_id: int, *args: Any) -> None:
-        log.info(f'Run number {run_id} already has a valid GUID, skipping.')
+        log.info(f"Run number {run_id} already has a valid GUID, skipping.")
 
     def _location_only_zero(run_id: int, *args: Any) -> None:
-        log.warning(f'Run number {run_id} has a zero (default) location '
-                    'code, but a non-zero work station code. Please manually '
-                    'resolve this, skipping the run now.')
+        log.warning(
+            f"Run number {run_id} has a zero (default) location "
+            "code, but a non-zero work station code. Please manually "
+            "resolve this, skipping the run now."
+        )
 
     def _workstation_only_zero(run_id: int, *args: Any) -> None:
-        log.warning(f'Run number {run_id} has a zero (default) work station'
-                    ' code, but a non-zero location code. Please manually '
-                    'resolve this, skipping the run now.')
+        log.warning(
+            f"Run number {run_id} has a zero (default) work station"
+            " code, but a non-zero location code. Please manually "
+            "resolve this, skipping the run now."
+        )
 
     def _both_zero(
         run_id: int, conn: ConnectionPlus, guid_comps: dict[str, Any]
     ) -> None:
         guid_str = build_guid_from_components(guid_comps)
-        with atomic(conn) as conn:
+        with atomic(conn) as atomic_conn:
             sql = """
                    UPDATE runs
                    SET guid = ?
                    WHERE run_id = ?
                    """
-            conn.execute(sql, (guid_str, run_id))
+            atomic_conn.execute(sql, (guid_str, run_id))
 
-        log.info(f'Succesfully updated run number {run_id}.')
+        log.info(f"Succesfully updated run number {run_id}.")
 
     actions: dict[
         tuple[bool, bool], Callable[[int, ConnectionPlus, dict[str, Any]], None]
@@ -1987,7 +2046,7 @@ def update_GUIDs(conn: ConnectionPlus) -> None:
         (False, False): _both_nonzero,
     }
 
-    for run_id in range(1, no_of_runs+1):
+    for run_id in range(1, no_of_runs + 1):
         guid_str = get_guid_from_run_id(conn, run_id)
         assert guid_str is not None
         guid_comps = parse_guid(guid_str)
@@ -1997,7 +2056,7 @@ def update_GUIDs(conn: ConnectionPlus) -> None:
         guid_comps["location"] = location
         guid_comps["work_station"] = work_station
 
-        log.info(f'Updating run number {run_id}...')
+        log.info(f"Updating run number {run_id}...")
         actions[(old_loc == 0, old_ws == 0)](run_id, conn, guid_comps)
 
 
@@ -2010,15 +2069,16 @@ def remove_trigger(conn: ConnectionPlus, trigger_id: str) -> None:
     Args:
         conn: database connection object
         trigger_id: id of the trigger
+
     """
     transaction(conn, f"DROP TRIGGER IF EXISTS {trigger_id};")
 
 
 def load_new_data_for_rundescriber(
-        conn: ConnectionPlus,
-        table_name: str,
-        rundescriber: RunDescriber,
-        read_status: Mapping[str, int],
+    conn: ConnectionPlus,
+    table_name: str,
+    rundescriber: RunDescriber,
+    read_status: Mapping[str, int],
 ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, int]]:
     """
     Load all new data for a given rundesciber since the rows given by read_status.
@@ -2035,13 +2095,11 @@ def load_new_data_for_rundescriber(
 
     """
 
-    parameters = tuple(ps.name for ps in
-                       rundescriber.interdeps.non_dependencies)
+    parameters = tuple(ps.name for ps in rundescriber.interdeps.non_dependencies)
     updated_read_status: dict[str, int] = dict(read_status)
     new_data_dict: dict[str, dict[str, np.ndarray]] = {}
 
     for meas_parameter in parameters:
-
         start = read_status.get(meas_parameter, 0) + 1
         new_data, n_rows_read = get_parameter_data_for_one_paramtree(
             conn,
@@ -2078,6 +2136,7 @@ def get_experiment_attributes_by_exp_id(
 
     Returns:
         A dictionary of the experiment attributes.
+
     """
     exp_attr_names = ["name", "sample_name", "start_time", "end_time", "format_string"]
 
@@ -2178,7 +2237,6 @@ class RawRunAttributesDict(TypedDict):
 def get_raw_run_attributes(
     conn: ConnectionPlus, guid: str
 ) -> RawRunAttributesDict | None:
-
     run_id = get_runid_from_guid(conn, guid)
 
     if run_id is None:

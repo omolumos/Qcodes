@@ -1,6 +1,7 @@
 """
 Test suite for Instrument and InstrumentBase
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -8,11 +9,12 @@ import gc
 import io
 import re
 import weakref
-from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any
 from weakref import WeakValueDictionary
 
 import pytest
 from pytest import FixtureRequest
+from typing_extensions import assert_type
 
 from qcodes.instrument import (
     Instrument,
@@ -29,6 +31,10 @@ from qcodes.instrument_drivers.mock_instruments import (
 )
 from qcodes.metadatable import Metadatable
 from qcodes.parameters import Function, Parameter
+from qcodes.utils import QCoDeSDeprecationWarning
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @pytest.fixture(name="testdummy", scope="function")
@@ -68,13 +74,22 @@ def _empty_instrument_with_empty_submodule() -> Iterator[Instrument]:
         instrument.close()
 
 
-@pytest.fixture(name='close_before_and_after', scope='function')
+@pytest.fixture(name="close_before_and_after", scope="function")
 def _close_before_and_after():
     Instrument.close_all()
     try:
         yield
     finally:
         Instrument.close_all()
+
+
+def test_instrument_type(request: pytest.FixtureRequest) -> None:
+    # make sure that the type of the instrument is correct.
+    # Due to our use of a metaclass for instrument this could be
+    # incorrect. See comment in instrument.py
+    testldummy = DummyInstrument("dummy")
+    request.addfinalizer(testldummy.close)
+    assert_type(testldummy, DummyInstrument)
 
 
 def test_validate_function(testdummy: DummyInstrument) -> None:
@@ -87,8 +102,8 @@ def test_validate_function(testdummy: DummyInstrument) -> None:
 
 
 def test_check_instances(testdummy: DummyInstrument) -> None:
-    with pytest.raises(KeyError, match='Another instrument has the name: testdummy'):
-        DummyInstrument(name='testdummy', gates=['dac1', 'dac2', 'dac3'])
+    with pytest.raises(KeyError, match="Another instrument has the name: testdummy"):
+        DummyInstrument(name="testdummy", gates=["dac1", "dac2", "dac3"])
 
     assert Instrument.instances() == []
     assert DummyInstrument.instances() == [testdummy]
@@ -170,7 +185,6 @@ def test_instrument_retry_with_same_name() -> None:
 
 
 def test_attr_access(testdummy: DummyInstrument) -> None:
-
     # test the instrument works
     testdummy.dac1.set(10)
     val = testdummy.dac1.get()
@@ -180,8 +194,8 @@ def test_attr_access(testdummy: DummyInstrument) -> None:
     testdummy.close()
 
     # make sure the name property still exists
-    assert hasattr(testdummy, 'name')
-    assert testdummy.name == 'testdummy'
+    assert hasattr(testdummy, "name")
+    assert testdummy.name == "testdummy"
 
     # make sure we can still print the instrument
     assert "testdummy" in testdummy.__repr__()
@@ -189,6 +203,17 @@ def test_attr_access(testdummy: DummyInstrument) -> None:
 
     # make sure the gate is removed
     assert not hasattr(testdummy, "dac1")
+
+
+def test_parameter_property(testdummy: DummyInstrument) -> None:
+    # since this is added dynamically we cannot know the type statically
+    assert_type(testdummy.dac1, Any)
+    # this is an assigned attribute so we know it statically
+    assert_type(testdummy.fixed_parameter, Parameter)
+
+    assert testdummy.fixed_parameter.get() == 5
+    testdummy.fixed_parameter.set(10)
+    assert testdummy.fixed_parameter.get() == 10
 
 
 def test_attr_access_channels(testdummychannelinstr: DummyChannelInstrument) -> None:
@@ -234,27 +259,35 @@ def test_get_idn(testdummy: DummyInstrument) -> None:
 
 
 def test_repr(testdummy: DummyInstrument) -> None:
-    assert repr(testdummy) == '<DummyInstrument: testdummy>'
+    assert repr(testdummy) == "<DummyInstrument: testdummy>"
 
 
 def test_add_remove_f_p(testdummy) -> None:
     with pytest.raises(KeyError, match="Duplicate parameter name dac1"):
         testdummy.add_parameter("dac1", get_cmd="foo")
 
-    testdummy.add_function('function', call_cmd='foo')
+    testdummy.add_function("function", call_cmd="foo")
 
-    with pytest.raises(KeyError, match='Duplicate function name function'):
-        testdummy.add_function('function', call_cmd='foo')
+    with pytest.raises(KeyError, match="Duplicate function name function"):
+        testdummy.add_function("function", call_cmd="foo")
 
-    testdummy.add_function('dac1', call_cmd='foo')
+    testdummy.add_function("dac1", call_cmd="foo")
 
     # test custom __get_attr__ for functions
-    fcn = testdummy['function']
-    assert isinstance(fcn, Function)
+    with pytest.warns(
+        QCoDeSDeprecationWarning,
+        match="Use attributes directly on the instrument object instead",
+    ):
+        fcn = testdummy["function"]
+        assert isinstance(fcn, Function)
     # by design, one gets the parameter if a function exists
     # and has same name
-    dac1 = testdummy['dac1']
-    assert isinstance(dac1, Parameter)
+    with pytest.warns(
+        QCoDeSDeprecationWarning,
+        match="Use attributes directly on the instrument object instead",
+    ):
+        dac1 = testdummy["dac1"]
+        assert isinstance(dac1, Parameter)
 
 
 def test_instances(testdummy, parabola) -> None:
@@ -282,25 +315,31 @@ def test_is_valid(testdummy) -> None:
 
 
 def test_snapshot_value(testdummy) -> None:
-    testdummy.add_parameter('has_snapshot_value',
-                            parameter_class=Parameter,
-                            initial_value=42,
-                            snapshot_value=True,
-                            get_cmd=None, set_cmd=None)
-    testdummy.add_parameter('no_snapshot_value',
-                            parameter_class=Parameter,
-                            initial_value=42,
-                            snapshot_value=False,
-                            get_cmd=None, set_cmd=None)
+    testdummy.add_parameter(
+        "has_snapshot_value",
+        parameter_class=Parameter,
+        initial_value=42,
+        snapshot_value=True,
+        get_cmd=None,
+        set_cmd=None,
+    )
+    testdummy.add_parameter(
+        "no_snapshot_value",
+        parameter_class=Parameter,
+        initial_value=42,
+        snapshot_value=False,
+        get_cmd=None,
+        set_cmd=None,
+    )
 
     snapshot = testdummy.snapshot()
 
-    assert 'name' in snapshot
-    assert 'testdummy' in snapshot['name']
+    assert "name" in snapshot
+    assert "testdummy" in snapshot["name"]
 
-    assert 'value' in snapshot['parameters']['has_snapshot_value']
-    assert 42 == snapshot['parameters']['has_snapshot_value']['value']
-    assert 'value' not in snapshot['parameters']['no_snapshot_value']
+    assert "value" in snapshot["parameters"]["has_snapshot_value"]
+    assert 42 == snapshot["parameters"]["has_snapshot_value"]["value"]
+    assert "value" not in snapshot["parameters"]["no_snapshot_value"]
 
 
 def test_meta_instrument(parabola) -> None:
@@ -315,7 +354,7 @@ def test_meta_instrument(parabola) -> None:
 
     # Add a scaling factor
     mock_instrument.gain(2)
-    assert mock_instrument.parabola() == parabola.parabola()*2
+    assert mock_instrument.parabola() == parabola.parabola() * 2
 
     # Check snapshots
     snap = mock_instrument.snapshot(update=True)
@@ -343,7 +382,8 @@ def test_find(testdummy) -> None:
     """Test finding an existing instrument"""
 
     instr_2 = find_or_create_instrument(
-        DummyInstrument, name='testdummy', gates=['dac1', 'dac2', 'dac3'])
+        DummyInstrument, name="testdummy", gates=["dac1", "dac2", "dac3"]
+    )
 
     assert instr_2 is testdummy
     assert instr_2.name == testdummy.name
@@ -352,8 +392,7 @@ def test_find(testdummy) -> None:
 @pytest.mark.usefixtures("close_before_and_after")
 def test_find_same_name_but_different_class(request: FixtureRequest) -> None:
     """Test finding an existing instrument with different class"""
-    instr = DummyInstrument(
-        name='instr', gates=['dac1', 'dac2', 'dac3'])
+    instr = DummyInstrument(name="instr", gates=["dac1", "dac2", "dac3"])
     request.addfinalizer(instr.close)
 
     class GammyInstrument(Instrument):
@@ -370,16 +409,18 @@ def test_find_same_name_but_different_class(request: FixtureRequest) -> None:
 
     with pytest.raises(TypeError, match=error_msg):
         _ = find_or_create_instrument(
-            GammyInstrument, name='instr', gates=['dac1', 'dac2', 'dac3'])
+            GammyInstrument, name="instr", gates=["dac1", "dac2", "dac3"]
+        )
 
 
 @pytest.mark.usefixtures("close_before_and_after")
 def test_create(request: FixtureRequest) -> None:
     """Test creating an instrument that does not yet exist"""
     instr = find_or_create_instrument(
-        DummyInstrument, name='instr', gates=['dac1', 'dac2', 'dac3'])
+        DummyInstrument, name="instr", gates=["dac1", "dac2", "dac3"]
+    )
     request.addfinalizer(instr.close)
-    assert 'instr' == instr.name
+    assert "instr" == instr.name
 
 
 @pytest.mark.usefixtures("close_before_and_after")
@@ -395,19 +436,17 @@ def test_other_exception() -> None:
 @pytest.mark.usefixtures("close_before_and_after")
 def test_recreate(request: FixtureRequest) -> None:
     """Test the case when instrument needs to be recreated"""
-    instr = DummyInstrument(
-        name='instr', gates=['dac1', 'dac2', 'dac3'])
+    instr = DummyInstrument(name="instr", gates=["dac1", "dac2", "dac3"])
     request.addfinalizer(instr.close)
 
-    assert ['instr'] == list(Instrument._all_instruments.keys())
+    assert ["instr"] == list(Instrument._all_instruments.keys())
 
     instr_2 = find_or_create_instrument(
-        DummyInstrument, name='instr', gates=['dac1', 'dac2'],
-        recreate=True
+        DummyInstrument, name="instr", gates=["dac1", "dac2"], recreate=True
     )
     request.addfinalizer(instr_2.close)
 
-    assert ['instr'] == list(Instrument._all_instruments.keys())
+    assert ["instr"] == list(Instrument._all_instruments.keys())
 
     assert instr_2 in Instrument._all_instruments.values()
     assert instr not in Instrument._all_instruments.values()
@@ -415,15 +454,16 @@ def test_recreate(request: FixtureRequest) -> None:
 
 def test_instrument_metadata(request: FixtureRequest) -> None:
     metadatadict = {1: "data", "some": "data"}
-    instrument = DummyInstrument(name='testdummy', gates=['dac1', 'dac2', 'dac3'],
-                                 metadata=metadatadict)
+    instrument = DummyInstrument(
+        name="testdummy", gates=["dac1", "dac2", "dac3"], metadata=metadatadict
+    )
     request.addfinalizer(instrument.close)
     assert instrument.metadata == metadatadict
 
 
 def test_instrumentbase_metadata() -> None:
     metadatadict = {1: "data", "some": "data"}
-    instrument = InstrumentBase('instr', metadata=metadatadict)
+    instrument = InstrumentBase("instr", metadata=metadatadict)
     assert instrument.metadata == metadatadict
 
 
@@ -459,29 +499,29 @@ def test_instrument_without_ref_is_gced():
     gc.collect()
     assert len(Instrument._all_instruments) == 0
 
+
 def test_snapshot_and_meta_attrs() -> None:
     """Test snapshot of InstrumentBase contains _meta_attrs attributes"""
     instr = InstrumentBase("instr", label="Label")
 
-    assert instr.name == 'instr'
+    assert instr.name == "instr"
 
     assert hasattr(instr, "_meta_attrs")
     assert instr._meta_attrs == ["name", "label"]
 
     snapshot = instr.snapshot()
 
-    assert 'name' in snapshot
-    assert 'instr' == snapshot['name']
+    assert "name" in snapshot
+    assert "instr" == snapshot["name"]
 
     assert "label" in snapshot
     assert "Label" == snapshot["label"]
 
-    assert '__class__' in snapshot
-    assert 'InstrumentBase' in snapshot['__class__']
+    assert "__class__" in snapshot
+    assert "InstrumentBase" in snapshot["__class__"]
 
 
 class TestSnapshotType(Metadatable):
-
     __test__ = False
 
     def __init__(self, sample_value: int) -> None:
@@ -493,7 +533,6 @@ class TestSnapshotType(Metadatable):
 
 
 class TestInstrument(InstrumentBase):
-
     __test__ = False
 
     def __init__(self, name, label) -> None:

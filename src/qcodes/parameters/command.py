@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 from qcodes.utils import is_function
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class NoCommandError(Exception):
@@ -52,6 +54,7 @@ class Command(Generic[Output, ParsedOutput]):
         TypeError: If output_parser is not the expected type.
         TypeError: If exec_string is not the expected type.
         NoCommandError: If no cmd is found no_cmd_function is missing.
+
     """
 
     def __init__(
@@ -63,7 +66,6 @@ class Command(Generic[Output, ParsedOutput]):
         output_parser: Callable[[Output], ParsedOutput] | None = None,
         no_cmd_function: Callable | None = None,
     ):
-
         self.arg_count = arg_count
 
         if no_cmd_function is not None and not is_function(no_cmd_function, arg_count):

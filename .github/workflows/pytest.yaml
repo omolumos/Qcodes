@@ -30,19 +30,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
         min-version: [false]
         include:
           - os: ubuntu-latest
-            python-version: "3.9"
+            python-version: "3.10"
             min-version: true
         exclude:
           - os: ubuntu-latest
-            python-version: "3.9"
+            python-version: "3.10"
           - os: windows-latest
             python-version: "3.11"
           - os: windows-latest
             python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.13"
     env:
       OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
@@ -50,17 +52,17 @@ jobs:
     steps:
 
     - name: Harden Runner
-      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+      uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
       with:
         egress-policy: audit
 
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         submodules: true
         # we need full history with tags for the version number
         fetch-depth: '0'
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
@@ -71,35 +73,42 @@ jobs:
       run: python -m pip install --upgrade pip setuptools wheel
       shell: bash
     - name: install qcodes with minimum requirements
-#     Use fork of requirements-builder until official version
-#     has support for pyproject.toml (pep621)
       run: |
-        pip install git+https://github.com/jenshnielsen/requirements-builder.git
-        pip install versioningit
-        requirements-builder -l min -e test setup.py -o min-requirements.txt
+        pip install uv
+        uv pip compile pyproject.toml --extra test --resolution=lowest-direct --output-file min-requirements.txt
         pip install -r min-requirements.txt
         pip install .[test]
+        echo "PYTEST_OPT=-Wignore" >> $GITHUB_ENV
       if: ${{ matrix.min-version }}
     - name: install qcodes
       run: |
         pip install .[test] -c requirements.txt
+        echo "PYTEST_OPT=" >> $GITHUB_ENV
       if: ${{ !matrix.min-version }}
-    - uses: jakebailey/pyright-action@03ab3c98073356eb56161009632b39fc2666321b # v2.0.1
+    - name: Get Pyright Version
+      id: pyright-version
+      run: |
+        PYRIGHT_VERSION=$(jq -r '.devDependencies.pyright' < package.json)
+        echo $PYRIGHT_VERSION
+        echo "version=$PYRIGHT_VERSION" >> $GITHUB_OUTPUT
+      working-directory: .github
+      shell: bash
+    - uses: jakebailey/pyright-action@b5d50e5cde6547546a5c4ac92e416a8c2c1a1dfe # v2.3.2
       with:
-        version: 1.1.349
+        version: ${{ steps.pyright-version.outputs.version }}
       if: ${{ !matrix.min-version }}
     - name: Run Mypy
       run: mypy -p qcodes
       if: ${{ !matrix.min-version }}
     - name: Run parallel tests
       run: |
-        pytest -m "not serial" --cov=qcodes --cov-report xml --hypothesis-profile ci  --durations=20 tests
+        pytest -m "not serial" --cov=qcodes --cov-report xml --hypothesis-profile ci  --durations=20 $PYTEST_OPT tests
 # a subset of the tests fails when run in parallel on Windows so run those in serial here
     - name: Run serial tests
       run: |
-        pytest -m "serial" -n 0 --dist no --cov=qcodes --cov-report xml --cov-append --hypothesis-profile ci tests
+        pytest -m "serial" -n 0 --dist no --cov=qcodes --cov-report xml --cov-append --hypothesis-profile ci $PYTEST_OPT tests
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@e0b68c6749509c5f83f984dd99a76a1c1a231044 # v4.0.1
+      uses: codecov/codecov-action@985343d70564a82044c1b7fcb84c2fa05405c1a2 # v5.0.4
       with:
         file: ./coverage.xml
         env_vars: OS,PYTHON

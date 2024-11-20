@@ -4,8 +4,7 @@ from qcodes.instrument.base import InstrumentProtocol
 
 
 class KeysightErrorProtocol(InstrumentProtocol, Protocol):
-    def error(self) -> tuple[int, str]:
-        ...
+    def error(self) -> tuple[int, str]: ...
 
 
 class KeysightErrorQueueMixin:
@@ -32,10 +31,11 @@ class KeysightErrorQueueMixin:
 
         Returns:
             The error code and the error message.
+
         """
-        rawmssg = self.ask('SYSTem:ERRor?')
-        code = int(rawmssg.split(',')[0])
-        mssg = rawmssg.split(',')[1].strip().replace('"', '')
+        rawmssg = self.ask("SYSTem:ERRor?")
+        code = int(rawmssg.split(",")[0])
+        mssg = rawmssg.split(",")[1].strip().replace('"', "")
 
         return code, mssg
 
@@ -46,19 +46,20 @@ class KeysightErrorQueueMixin:
         Args:
             verbose: If true, the error messages are printed.
                 Default: True.
+
         """
 
-        self.log.debug('Flushing error queue...')
+        self.log.debug("Flushing error queue...")
 
         err_code, err_message = self.error()
-        self.log.debug(f'    {err_code}, {err_message}')
+        self.log.debug(f"    {err_code}, {err_message}")
         if verbose:
             print(err_code, err_message)
 
         while err_code != 0:
             err_code, err_message = self.error()
-            self.log.debug(f'    {err_code}, {err_message}')
+            self.log.debug(f"    {err_code}, {err_message}")
             if verbose:
                 print(err_code, err_message)
 
-        self.log.debug('...flushing complete')
+        self.log.debug("...flushing complete")

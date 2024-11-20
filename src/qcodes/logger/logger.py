@@ -8,55 +8,55 @@ the default configuration.
 import io
 import json
 import logging
-
-# logging.handlers is not imported by logging. This extra import is necessary
 import logging.handlers
 import os
-import platform
 import sys
 from collections import OrderedDict
-from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from datetime import datetime
-from types import TracebackType
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Any
+
+from typing_extensions import deprecated
 
 if TYPE_CHECKING:
-    from opencensus.ext.azure.common.protocol import (  # type: ignore[import-untyped]
-        Envelope,
-    )
-    from opencensus.ext.azure.log_exporter import (  # type: ignore[import-untyped]
-        AzureLogHandler,
-    )
+    from collections.abc import Iterator, Sequence
+    from types import TracebackType
 
 import qcodes as qc
 from qcodes.utils import (
+    QCoDeSDeprecationWarning,
     get_all_installed_package_versions,
     get_qcodes_user_path,
     is_qcodes_installed_editably,
 )
 
+AzureLogHandler = Any
+Envelope = Any
+
 log: logging.Logger = logging.getLogger(__name__)
 
-LevelType = Union[int, str]
+LevelType = int | str
 
 LOGGING_DIR = "logs"
-LOGGING_SEPARATOR = ' ¦ '
+LOGGING_SEPARATOR = " ¦ "
 """:data:`LOGGING_SEPARATOR` defines the str used to separate parts of the log
  message.
 """
 HISTORY_LOG_NAME = "command_history.log"
-PYTHON_LOG_NAME = 'qcodes.log'
+PYTHON_LOG_NAME = "qcodes.log"
 
-FORMAT_STRING_DICT = OrderedDict([
-    ('asctime', 's'),
-    ('name', 's'),
-    ('levelname', 's'),
-    ('module', 's'),
-    ('funcName', 's'),
-    ('lineno', 'd'),
-    ('message', 's')])
+FORMAT_STRING_DICT = OrderedDict(
+    [
+        ("asctime", "s"),
+        ("name", "s"),
+        ("levelname", "s"),
+        ("module", "s"),
+        ("funcName", "s"),
+        ("lineno", "d"),
+        ("message", "s"),
+    ]
+)
 """:data:`FORMAT_STRING_DICT` defines the format used in logging messages.
 """
 
@@ -64,9 +64,9 @@ FORMAT_STRING_DICT = OrderedDict([
 # The handler of the root logger that get set up by `start_logger` are globals
 # for this modules scope, as it is intended to only use a single file and
 # console hander.
-console_handler: Optional[logging.Handler] = None
-file_handler: Optional[logging.Handler] = None
-telemetry_handler: Optional["AzureLogHandler"] = None
+console_handler: logging.Handler | None = None
+file_handler: logging.Handler | None = None
+telemetry_handler: AzureLogHandler | None = None
 
 
 _opencensus_filter = logging.Filter(name="opencensus")
@@ -76,6 +76,10 @@ _azure_monitor_opentelemetry_exporter_filter = logging.Filter(
 )
 
 
+@deprecated(
+    "filter_out_telemetry_log_records is deprecated and will be removed",
+    category=QCoDeSDeprecationWarning,
+)
 def filter_out_telemetry_log_records(record: logging.LogRecord) -> bool:
     """
     here we filter any message that is likely to be thrown from
@@ -93,8 +97,9 @@ def get_formatter() -> logging.Formatter:
     Returns :class:`logging.Formatter` according to
     :data:`FORMAT_STRING_DICT`
     """
-    format_string_items = [f'%({name}){fmt}'
-                           for name, fmt in FORMAT_STRING_DICT.items()]
+    format_string_items = [
+        f"%({name}){fmt}" for name, fmt in FORMAT_STRING_DICT.items()
+    ]
     format_string = LOGGING_SEPARATOR.join(format_string_items)
     return logging.Formatter(format_string)
 
@@ -104,14 +109,16 @@ def get_formatter_for_telemetry() -> logging.Formatter:
     Returns :class:`logging.Formatter` with only name, function name and
     message keywords from FORMAT_STRING_DICT
     """
-    format_string_items = [f'%({name}){fmt}'
-                           for name, fmt in FORMAT_STRING_DICT.items()
-                           if name in ['message', 'name', 'funcName']]
+    format_string_items = [
+        f"%({name}){fmt}"
+        for name, fmt in FORMAT_STRING_DICT.items()
+        if name in ["message", "name", "funcName"]
+    ]
     format_string = LOGGING_SEPARATOR.join(format_string_items)
     return logging.Formatter(format_string)
 
 
-def get_console_handler() -> Optional[logging.Handler]:
+def get_console_handler() -> logging.Handler | None:
     """
     Get handle that prints messages from the root logger to the console.
     Returns ``None`` if :func:`start_logger` has not been called.
@@ -120,7 +127,7 @@ def get_console_handler() -> Optional[logging.Handler]:
     return console_handler
 
 
-def get_file_handler() -> Optional[logging.Handler]:
+def get_file_handler() -> logging.Handler | None:
     """
     Get a handle that streams messages from the root logger to the qcodes log
     file. To setup call :func:`start_logger`.
@@ -130,7 +137,7 @@ def get_file_handler() -> Optional[logging.Handler]:
     return file_handler
 
 
-def get_level_name(level: Union[str, int]) -> str:
+def get_level_name(level: str | int) -> str:
     """
     Get a logging level name from either a logging level code or logging level
     name. Will return the output of :func:`logging.getLevelName` if called with
@@ -141,13 +148,15 @@ def get_level_name(level: Union[str, int]) -> str:
     elif isinstance(level, int):
         return logging.getLevelName(level)
     else:
-        raise RuntimeError('get_level_name: '
-                           f'Cannot to convert level {level} of type '
-                           f'{type(level)} to logging level name. Need '
-                           'string or int.')
+        raise RuntimeError(
+            "get_level_name: "
+            f"Cannot to convert level {level} of type "
+            f"{type(level)} to logging level name. Need "
+            "string or int."
+        )
 
 
-def get_level_code(level: Union[str, int]) -> int:
+def get_level_code(level: str | int) -> int:
     """
     Get a logging level code from either a logging level string or a logging
     level code. Will return the output of :func:`logging.getLevelName` if
@@ -156,17 +165,25 @@ def get_level_code(level: Union[str, int]) -> int:
     if isinstance(level, int):
         return level
     elif isinstance(level, str):
-        # It is possible to get the level code from the
-        # `getLevelName` call due to backwards compatibillity to an earlier
-        # bug:
-        # >>> import logging
-        # >>> print(logging.getLevelName('DEBUG'))
-        return logging.getLevelName(level)
+        if sys.version_info >= (3, 11):
+            return logging.getLevelNamesMapping()[level]
+        else:
+            # The `getLevelNamesMapping` function was introduced in Python 3.11.
+            # It is possible to get the level code from the
+            # `getLevelName` call due to backwards compatibility to an earlier
+            # bug:
+            # >>> import logging
+            # >>> print(logging.getLevelName('DEBUG'))
+            # but this is now deprecated
+            # remove this else block when we drop support for Python 3.10
+            return logging.getLevelName(level)  # pyright: ignore[reportDeprecated]
     else:
-        raise RuntimeError('get_level_code: '
-                           f'Cannot to convert level {level} of type '
-                           f'{type(level)} to logging level code. Need '
-                           'string or int.')
+        raise RuntimeError(
+            "get_level_code: "
+            f"Cannot to convert level {level} of type "
+            f"{type(level)} to logging level code. Need "
+            "string or int."
+        )
 
 
 def generate_log_file_name() -> str:
@@ -177,7 +194,7 @@ def generate_log_file_name() -> str:
 
     pid = str(os.getpid())
     dt_str = datetime.now().strftime("%y%m%d")
-    python_log_name = '-'.join([dt_str, pid, PYTHON_LOG_NAME])
+    python_log_name = "-".join([dt_str, pid, PYTHON_LOG_NAME])
     return python_log_name
 
 
@@ -185,9 +202,7 @@ def get_log_file_name() -> str:
     """
     Get the full path to the log file currently used.
     """
-    return os.path.join(get_qcodes_user_path(),
-                        LOGGING_DIR,
-                        generate_log_file_name())
+    return os.path.join(get_qcodes_user_path(), LOGGING_DIR, generate_log_file_name())
 
 
 def flush_telemetry_traces() -> None:
@@ -198,64 +213,6 @@ def flush_telemetry_traces() -> None:
     global telemetry_handler
     if qc.config.telemetry.enabled and telemetry_handler is not None:
         telemetry_handler.flush()
-
-
-def _create_telemetry_handler() -> "AzureLogHandler":
-    """
-    Configure, create, and return the telemetry handler
-    """
-    from opencensus.ext.azure.log_exporter import AzureLogHandler
-    global telemetry_handler
-
-    # The default_custom_dimensions will appear in the "customDimensions"
-    # field in Azure log analytics for every log message alongside any
-    # custom dimensions that message may have. All messages additionally come
-    # with custom dimensions fileName, level, lineNumber, module, and process
-    default_custom_dimensions = {"pythonExecutable": sys.executable}
-
-    class CustomDimensionsFilter(logging.Filter):
-        """
-        Add application-wide properties to the customDimension field of
-        AzureLogHandler records
-        """
-
-        def __init__(self, custom_dimensions: dict[str, str]):
-            super().__init__()
-            self.custom_dimensions = custom_dimensions
-
-        def filter(self, record: logging.LogRecord) -> bool:
-            """
-            Add the default custom_dimensions into the current log record
-            """
-            cdim = self.custom_dimensions.copy()
-            cdim.update(getattr(record, "custom_dimensions", {}))
-            record.custom_dimensions = cdim
-
-            return True
-
-    # Transport module of opencensus-ext-azure logs info 'transmission
-    # succeeded' which is also exported to azure if AzureLogHandler is
-    # in root_logger. The following lines stops that.
-    logging.getLogger("opencensus.ext.azure.common.transport").setLevel(logging.WARNING)
-
-    loc = qc.config.GUID_components.location
-    stat = qc.config.GUID_components.work_station
-
-    def callback_function(envelope: "Envelope") -> bool:
-        envelope.tags["ai.user.accountId"] = platform.node()
-        envelope.tags["ai.user.id"] = f"{loc:02x}-{stat:06x}"
-        return True
-
-    telemetry_handler = AzureLogHandler(
-        connection_string=f"InstrumentationKey="
-        f"{qc.config.telemetry.instrumentation_key}"
-    )
-    telemetry_handler.add_telemetry_processor(callback_function)
-    telemetry_handler.setLevel(logging.INFO)
-    telemetry_handler.addFilter(CustomDimensionsFilter(default_custom_dimensions))
-    telemetry_handler.setFormatter(get_formatter_for_telemetry())
-
-    return telemetry_handler
 
 
 def start_logger() -> None:
@@ -292,7 +249,6 @@ def start_logger() -> None:
     console_handler = logging.StreamHandler()
     console_handler.setLevel(qc.config.logger.console_level)
     console_handler.setFormatter(get_formatter())
-    console_handler.addFilter(filter_out_telemetry_log_records)
     root_logger.addHandler(console_handler)
 
     # file
@@ -311,16 +267,16 @@ def start_logger() -> None:
     logging.captureWarnings(capture=True)
 
     if qc.config.telemetry.enabled:
-        root_logger.addHandler(_create_telemetry_handler())
+        log.warning("Enabling telemetry in QCoDes config has no effect.")
 
     log.info("QCoDes logger setup completed")
 
     log_qcodes_versions(log)
 
-    print(f'Qcodes Logfile : {filename}')
+    print(f"Qcodes Logfile : {filename}")
 
 
-def start_command_history_logger(log_dir: Optional[str] = None) -> None:
+def start_command_history_logger(log_dir: str | None = None) -> None:
     """
     Start logging of the history of the interactive command shell.
     Works only with IPython and Jupyter. Call function again to set new path
@@ -329,14 +285,15 @@ def start_command_history_logger(log_dir: Optional[str] = None) -> None:
     Args:
         log_dir: directory where log shall be stored to. If left out, defaults
             to ``~/.qcodes/logs/command_history.log``
+
     """
     # get_ipython is part of the public api but IPython does
     # not use __all__ to mark this
     from IPython import get_ipython  # type: ignore[attr-defined]
+
     ipython = get_ipython()
     if ipython is None:
-        log.warning("Command history can't be saved"
-                    " outside of IPython/Jupyter")
+        log.warning("Command history can't be saved outside of IPython/Jupyter")
         return
 
     log_dir = log_dir or os.path.join(get_qcodes_user_path(), LOGGING_DIR)
@@ -393,13 +350,14 @@ def conditionally_start_all_logging() -> None:
         Start logging if the GUID components and the instrumentation key for
         telemetry are set up, and not in a test environment.
     """
+
     def start_logging_on_import() -> bool:
         config = qc.config
-        if config.logger.start_logging_on_import == 'always':
+        if config.logger.start_logging_on_import == "always":
             return True
-        elif config.logger.start_logging_on_import == 'never':
+        elif config.logger.start_logging_on_import == "never":
             return False
-        elif config.logger.start_logging_on_import == 'if_telemetry_set_up':
+        elif config.logger.start_logging_on_import == "if_telemetry_set_up":
             return (
                 config.GUID_components.location != 0
                 and config.GUID_components.work_station != 0
@@ -407,16 +365,17 @@ def conditionally_start_all_logging() -> None:
                 != "00000000-0000-0000-0000-000000000000"
             )
         else:
-            raise RuntimeError('Error in qcodesrc validation.')
+            raise RuntimeError("Error in qcodesrc validation.")
 
     def running_in_test_or_tool() -> bool:
         import sys
+
         tools = (
-            'pytest.py',
-            'pytest',
-            r'sphinx\__main__.py',    # Sphinx docs building
-            '_jb_pytest_runner.py',  # Jetbrains Pycharm
-            'testlauncher.py'        # VSCode
+            "pytest.py",
+            "pytest",
+            r"sphinx\__main__.py",  # Sphinx docs building
+            "_jb_pytest_runner.py",  # Jetbrains Pycharm
+            "testlauncher.py",  # VSCode
         )
         return any(sys.argv[0].endswith(tool) for tool in tools)
 
@@ -425,9 +384,9 @@ def conditionally_start_all_logging() -> None:
 
 
 @contextmanager
-def handler_level(level: LevelType,
-                  handler: Union[logging.Handler,
-                                 Sequence[logging.Handler]]) -> Iterator[None]:
+def handler_level(
+    level: LevelType, handler: "logging.Handler | Sequence[logging.Handler]"
+) -> "Iterator[None]":
     """
     Context manager to temporarily change the level of handlers.
 
@@ -438,6 +397,7 @@ def handler_level(level: LevelType,
     Args:
         level: Level to set the handlers to.
         handler: Handle or sequence of handlers which to change.
+
     """
     if isinstance(handler, logging.Handler):
         handler = (handler,)
@@ -452,7 +412,7 @@ def handler_level(level: LevelType,
 
 
 @contextmanager
-def console_level(level: LevelType) -> Iterator[None]:
+def console_level(level: LevelType) -> "Iterator[None]":
     """
     Context manager to temporarily change the level of the qcodes console
     handler.
@@ -463,17 +423,16 @@ def console_level(level: LevelType) -> Iterator[None]:
 
     Args:
         level: Level to set the console handler to.
+
     """
     global console_handler
     if console_handler is None:
-        raise RuntimeError("Console handler is None. Cannot set the level"
-                           " on it")
+        raise RuntimeError("Console handler is None. Cannot set the level on it")
     with handler_level(level, handler=console_handler):
         yield
 
 
 class LogCapture:
-
     """
     Context manager to grab all log messages, optionally
     from a specific logger.
@@ -485,8 +444,11 @@ class LogCapture:
 
     """
 
-    def __init__(self, logger: logging.Logger = logging.getLogger(),
-                 level: Optional[LevelType] = None) -> None:
+    def __init__(
+        self,
+        logger: logging.Logger = logging.getLogger(),
+        level: LevelType | None = None,
+    ) -> None:
         self.logger = logger
         self.level = level or logging.NOTSET
 
@@ -494,18 +456,20 @@ class LogCapture:
         for h in self.stashed_handlers:
             self.logger.removeHandler(h)
 
-    def __enter__(self) -> 'LogCapture':
+    def __enter__(self) -> "LogCapture":
         self.log_capture = io.StringIO()
         self.string_handler = logging.StreamHandler(self.log_capture)
         self.string_handler.setLevel(self.level)
         self.logger.addHandler(self.string_handler)
+        self._stashed_logger_level = self.logger.getEffectiveLevel()
+        self.logger.setLevel(logging.NOTSET)
         return self
 
     def __exit__(
         self,
-        exception_type: Optional[type[BaseException]],
-        exception_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exception_type: type[BaseException] | None,
+        exception_value: BaseException | None,
+        traceback: "TracebackType | None",
     ) -> None:
         self.logger.removeHandler(self.string_handler)
         self.value = self.log_capture.getvalue()
@@ -513,3 +477,4 @@ class LogCapture:
 
         for h in self.stashed_handlers:
             self.logger.addHandler(h)
+        self.logger.setLevel(self._stashed_logger_level)

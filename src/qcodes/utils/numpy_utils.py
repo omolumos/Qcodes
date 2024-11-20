@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 try:
     from numpy.exceptions import VisibleDeprecationWarning
 except ImportError:
     # numpy < 2.0
-    from numpy import VisibleDeprecationWarning
+    from numpy import VisibleDeprecationWarning  # type: ignore[attr-defined, no-redef]
 
 
 def list_of_data_to_maybe_ragged_nd_array(

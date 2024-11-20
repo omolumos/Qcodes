@@ -1,6 +1,8 @@
-from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, ClassVar, Union
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Sequence
 
 
 class DelegateAttributes:
@@ -85,7 +87,7 @@ class DelegateAttributes:
         return sorted(set(names))
 
 
-def strip_attrs(obj: object, whitelist: Sequence[str] = ()) -> None:
+def strip_attrs(obj: object, whitelist: "Sequence[str]" = ()) -> None:
     """
     Irreversibly remove all direct instance attributes of object, to help with
     disposal, breaking circular references.
@@ -93,6 +95,7 @@ def strip_attrs(obj: object, whitelist: Sequence[str] = ()) -> None:
     Args:
         obj: Object to be stripped.
         whitelist: List of names that are not stripped from the object.
+
     """
     try:
         lst = set(list(obj.__dict__.keys())) - set(whitelist)
@@ -106,7 +109,7 @@ def strip_attrs(obj: object, whitelist: Sequence[str] = ()) -> None:
 
 
 def checked_getattr(
-    instance: Any, attribute: str, expected_type: Union[type, tuple[type, ...]]
+    instance: Any, attribute: str, expected_type: type | tuple[type, ...]
 ) -> Any:
     """
     Like ``getattr`` but raises type error if not of expected type.
@@ -117,10 +120,52 @@ def checked_getattr(
     return attr
 
 
+def getattr_indexed(instance: Any, attribute: str) -> Any:
+    """
+    Similar to ``getattr`` but allows indexing the returned attribute.
+    Returning a default value is _not_ supported.
+
+    The indices are decimal digits surrounded by square brackets.
+    Chained indexing is supported, but the string should not contain
+    any whitespace between consecutive indices.
+
+    Example: `getattr_indexed(some_object, "list_of_lists_field[1][2]")`
+    """
+    if not attribute.endswith("]"):
+        return getattr(instance, attribute)
+
+    end: int = len(attribute) - 1
+
+    start: int = attribute.find("[", 0, end)
+    attr: Any = getattr(instance, attribute[0:start])
+    start += 1
+
+    while (pos := attribute.find("][", start, end)) != -1:
+        index = int(attribute[start:pos])
+        attr = attr[index]
+        start = pos + 2
+
+    index = int(attribute[start:end])
+    attr = attr[index]
+    return attr
+
+
+def checked_getattr_indexed(
+    instance: Any, attribute: str, expected_type: type | tuple[type, ...]
+) -> Any:
+    """
+    Like ``getattr_indexed`` but raises type error if not of expected type.
+    """
+    attr: Any = getattr_indexed(instance, attribute)
+    if not isinstance(attr, expected_type):
+        raise TypeError()
+    return attr
+
+
 @contextmanager
 def attribute_set_to(
     object_: object, attribute_name: str, new_value: Any
-) -> Iterator[None]:
+) -> "Iterator[None]":
     """
     This context manager allows to change a given attribute of a given object
     to a new value, and the original value is reverted upon exit of the context
@@ -131,6 +176,7 @@ def attribute_set_to(
         attribute_name: The name of the attribute that is to be changed.
         new_value: The new value to which the attribute of the object is
                    to be changed.
+
     """
     old_value = getattr(object_, attribute_name)
     setattr(object_, attribute_name, new_value)

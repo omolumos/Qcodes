@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import collections.abc
 import os
-from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -18,6 +17,8 @@ from .parameter_base import ParameterBase
 from .sequence_helpers import is_sequence_of
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from qcodes.instrument import InstrumentBase
 
 
@@ -123,6 +124,7 @@ class ArrayParameter(ParameterBase):
 
         metadata: Extra information to include with the
             JSON snapshot of the parameter.
+
     """
 
     def __init__(
@@ -145,9 +147,9 @@ class ArrayParameter(ParameterBase):
     ) -> None:
         super().__init__(
             name,
-            instrument,
-            snapshot_get,
-            metadata,
+            instrument=instrument,
+            snapshot_get=snapshot_get,
+            metadata=metadata,
             snapshot_value=snapshot_value,
             snapshot_exclude=snapshot_exclude,
             **kwargs,
@@ -199,10 +201,10 @@ class ArrayParameter(ParameterBase):
             (
                 "Parameter class:",
                 "",
-                "* `name` %s" % self.name,
-                "* `label` %s" % self.label,
-                "* `unit` %s" % self.unit,
-                "* `shape` %s" % repr(self.shape),
+                f"* `name` {self.name}",
+                f"* `label` {self.label}",
+                f"* `unit` {self.unit}",
+                f"* `shape` {self.shape!r}",
             )
         )
 

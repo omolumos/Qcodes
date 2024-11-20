@@ -2,29 +2,32 @@
 This plotting module provides various functions to plot the data measured
 using QCoDeS.
 """
+
 from __future__ import annotations
 
 import inspect
 import logging
 import os
-from collections.abc import Sequence
 from contextlib import contextmanager
 from functools import partial
 from textwrap import wrap
 from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 import numpy as np
-from matplotlib.figure import Figure
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import matplotlib
+    import matplotlib.axes
     import matplotlib.ticker
     from matplotlib.axes import Axes
     from matplotlib.colorbar import Colorbar
 
+    from qcodes.dataset.data_set_protocol import DataSetProtocol
+
 import qcodes as qc
 from qcodes.dataset.data_set import load_by_run_spec
-from qcodes.dataset.data_set_protocol import DataSetProtocol
 from qcodes.plotting import auto_color_scale_from_config, find_scale_and_prefix
 
 from .data_export import (
@@ -62,6 +65,8 @@ def _appropriate_kwargs(plottype: str, colorbar_present: bool, **kwargs: Any) ->
     Args:
         plottype: The plot type for which the kwargs should be adjusted
         colorbar_present: Is there a non-None colorbar in this plot iteration?
+        **kwargs: Keyword arguments passed to the plotting function.
+
     """
 
     def linehandler(**kwargs: Any) -> Any:
@@ -145,6 +150,7 @@ def plot_dataset(
         complex_plot_phase: Format of phase for plotting complex-valued data,
             either ``"radians"`` or ``"degrees"``. Applicable only for the
             cases where the dataset contains complex numbers
+        **kwargs: Keyword arguments passed to the plotting function.
 
     Returns:
         A list of axes and a list of colorbars of the same length. The
@@ -152,6 +158,7 @@ def plot_dataset(
         1D plots)
 
     Config dependencies: (qcodesrc.json)
+
     """
     import matplotlib.axes
     import matplotlib.colorbar
@@ -233,7 +240,6 @@ def plot_dataset(
     new_colorbars: list[Colorbar | None] = []
 
     for data, ax, colorbar in zip(alldata, axeslist, colorbars):
-
         if len(data) == 2:  # 1D PLOTTING
             log.debug(f"Doing a 1D plot with kwargs: {kwargs}")
 
@@ -327,7 +333,11 @@ def plot_dataset(
 
 def plot_and_save_image(
     data: DataSetProtocol, save_pdf: bool = True, save_png: bool = True
-) -> tuple[DataSetProtocol, tuple[Axes, ...], tuple[Colorbar | None, ...],]:
+) -> tuple[
+    DataSetProtocol,
+    tuple[Axes, ...],
+    tuple[Colorbar | None, ...],
+]:
     """
     The utility function to plot results and save the figures either in pdf or
     png or both formats.
@@ -336,7 +346,10 @@ def plot_and_save_image(
         data: The QCoDeS dataset to be plotted.
         save_pdf: Save figure in pdf format.
         save_png: Save figure in png format.
+
     """
+    from matplotlib.figure import Figure
+
     from qcodes import config
 
     dataid = data.captured_run_id
@@ -410,6 +423,7 @@ def _complex_to_real_preparser(
             "mag_and_phase"
         degrees: Whether to return the phase in degrees. The default is to
             return the phase in radians
+
     """
 
     if conversion not in ["real_and_imag", "mag_and_phase"]:
@@ -567,12 +581,13 @@ def plot_2d_scatterplot(
         z: The z values
         ax: The axis to plot onto
         colorbar: The colorbar to plot into
+        **kwargs: Keyword arguments passed to the plotting function.
 
     Returns:
         The matplotlib axis handles for plot and colorbar
+
     """
     import matplotlib
-    import matplotlib.cm
 
     if "rasterized" in kwargs.keys():
         rasterized = kwargs.pop("rasterized")
@@ -591,7 +606,7 @@ def plot_2d_scatterplot(
 
     if z_is_stringy:
         name = getattr(cmap, "name", _DEFAULT_COLORMAP)
-        cmap = matplotlib.cm.get_cmap(name, len(z_strings))
+        cmap = matplotlib.colormaps.get_cmap(name).resampled(len(z_strings))
 
     # according to the docs the c argument should support an ndarray
     # but that fails type checking
@@ -637,12 +652,13 @@ def plot_on_a_plain_grid(
         z: The z values
         ax: The axis to plot onto
         colorbar: A colorbar to reuse the axis for
+        **kwargs: Keyword arguments passed to the plotting function.
 
     Returns:
         The matplotlib axes handle for plot and colorbar
+
     """
     import matplotlib
-    import matplotlib.cm
 
     log.debug(f"Got kwargs: {kwargs}")
 
@@ -691,7 +707,7 @@ def plot_on_a_plain_grid(
 
     if z_is_stringy:
         name = getattr(cmap, "name", _DEFAULT_COLORMAP)
-        cmap = matplotlib.cm.get_cmap(name, len(z_strings))
+        cmap = matplotlib.colormaps.get_cmap(name).resampled(len(z_strings))
 
     colormesh = ax.pcolormesh(
         x_to_plot,
@@ -804,6 +820,7 @@ def _make_rescaled_ticks_and_units(
     Returns:
         A tuple with the ticks formatter (matlplotlib.ticker.FuncFormatter) and
         the new label.
+
     """
     from matplotlib.ticker import FuncFormatter
 
@@ -862,5 +879,6 @@ def _is_string_valued_array(values: np.ndarray) -> bool:
 
     Returns:
         True, if the array contains string; False otherwise
+
     """
     return isinstance(values[0], str)

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from ..instrument_base import InstrumentBase
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from qcodes.station import Station
 
 
@@ -27,7 +28,9 @@ class InstrumentGroup(InstrumentBase):
             values to set on those parameters when loading this instrument.
         set_initial_values_on_load: Set default values on load. Defaults to
             False.
+
     """
+
     def __init__(
         self,
         name: str,
@@ -36,12 +39,12 @@ class InstrumentGroup(InstrumentBase):
         submodules: Mapping[str, Mapping[str, list[str]]],
         initial_values: Mapping[str, Mapping[str, Any]],
         set_initial_values_on_load: bool = False,
-        **kwargs: Any
+        **kwargs: Any,
     ):
         super().__init__(name=name, **kwargs)
 
-        module_name = '.'.join(submodules_type.split('.')[:-1])
-        instr_class_name = submodules_type.split('.')[-1]
+        module_name = ".".join(submodules_type.split(".")[:-1])
+        instr_class_name = submodules_type.split(".")[-1]
         module = importlib.import_module(module_name)
         instr_class = getattr(module, instr_class_name)
 
@@ -55,13 +58,10 @@ class InstrumentGroup(InstrumentBase):
                 station=station,
                 **inputs,
                 initial_values=initial_values.get(submodule_name),
-                set_initial_values_on_load=set_initial_values_on_load
+                set_initial_values_on_load=set_initial_values_on_load,
             )
 
-            self.add_submodule(
-                submodule_name,
-                submodule
-            )
+            self.add_submodule(submodule_name, submodule)
 
     def __repr__(self) -> str:
         submodules = ", ".join(self.submodules.keys())

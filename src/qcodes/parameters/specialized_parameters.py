@@ -3,9 +3,9 @@ Module for specialized parameters. The :mod:`qcodes.instrument.parameter`
 module provides generic parameters for different generic cases. This module
 provides useful/convenient specializations of such generic parameters.
 """
+
 from __future__ import annotations
 
-from collections.abc import Callable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -14,6 +14,8 @@ from qcodes.validators import Strings, Validator
 from .parameter import Parameter
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from qcodes.instrument import InstrumentBase
 
 
@@ -26,10 +28,10 @@ class ElapsedTimeParameter(Parameter):
     Args:
         name: The local name of the parameter. See the documentation of
             :class:`qcodes.parameters.Parameter` for more details.
+
     """
 
     def __init__(self, name: str, label: str = "Elapsed time", **kwargs: Any):
-
         hardcoded_kwargs = ["unit", "get_cmd", "set_cmd"]
 
         for hck in hardcoded_kwargs:
@@ -70,6 +72,7 @@ class InstrumentRefParameter(Parameter):
             and cannot be set after initiation.
 
         **kwargs: Passed to InstrumentRefParameter parent class
+
     """
 
     def __init__(
@@ -92,15 +95,15 @@ class InstrumentRefParameter(Parameter):
             raise RuntimeError("InstrumentRefParameter does not support set_cmd.")
         super().__init__(
             name,
-            instrument,
-            label,
-            unit,
-            get_cmd,
-            set_cmd,
-            initial_value,
-            max_val_age,
-            vals,
-            docstring,
+            instrument=instrument,
+            label=label,
+            unit=unit,
+            get_cmd=get_cmd,
+            set_cmd=set_cmd,
+            initial_value=initial_value,
+            max_val_age=max_val_age,
+            vals=vals,
+            docstring=docstring,
             **kwargs,
         )
 

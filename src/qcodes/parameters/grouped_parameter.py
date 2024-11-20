@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict, namedtuple
-from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .delegate_parameter import DelegateParameter
 from .group_parameter import Group, GroupParameter
-from .parameter import Parameter
 from .parameter_base import ParamDataType, ParameterBase, ParamRawDataType
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping, Sequence
+
     from qcodes.instrument.base import InstrumentBase
+
+    from .parameter import Parameter
 
 
 _log = logging.getLogger(__name__)
@@ -77,6 +79,7 @@ class DelegateGroup(Group):
             parameter.
         formatter: Optional formatter for value returned by get_parameters(),
             defaults to a namedtuple with the parameter names as keys.
+
     """
 
     def __init__(
@@ -159,6 +162,7 @@ class GroupedParameter(ParameterBase):
         unit: The unit of measure. Use ``''`` for unitless.
         label: Optional label, defaults to parameter name.
         default set method(s).
+
     """
 
     def __init__(
@@ -203,6 +207,7 @@ class GroupedParameter(ParameterBase):
 
         Returns:
             float: Returns the parameter value
+
         """
         self.group.set(value)
 

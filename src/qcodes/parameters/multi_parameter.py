@@ -133,6 +133,7 @@ class MultiParameter(ParameterBase):
 
         metadata: Extra information to include with the
             JSON snapshot of the parameter.
+
     """
 
     def __init__(
@@ -156,9 +157,9 @@ class MultiParameter(ParameterBase):
     ) -> None:
         super().__init__(
             name,
-            instrument,
-            snapshot_get,
-            metadata,
+            instrument=instrument,
+            snapshot_get=snapshot_get,
+            metadata=metadata,
             snapshot_value=snapshot_value,
             snapshot_exclude=snapshot_exclude,
             **kwargs,
@@ -211,10 +212,10 @@ class MultiParameter(ParameterBase):
             (
                 "MultiParameter class:",
                 "",
-                "* `name` %s" % self.name,
-                "* `names` %s" % ", ".join(self.names),
-                "* `labels` %s" % ", ".join(self.labels),
-                "* `units` %s" % ", ".join(self.units),
+                f"* `name` {self.name}",
+                "* `names` {}".format(", ".join(self.names)),
+                "* `labels` {}".format(", ".join(self.labels)),
+                "* `units` {}".format(", ".join(self.units)),
             )
         )
 

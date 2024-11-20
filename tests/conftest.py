@@ -5,8 +5,6 @@ import gc
 import os
 import sys
 import threading
-from collections.abc import Generator
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -15,7 +13,6 @@ from hypothesis import settings
 import qcodes as qc
 from qcodes.configuration import Config
 from qcodes.dataset import initialise_database, new_data_set
-from qcodes.dataset.data_set import DataSet
 from qcodes.dataset.descriptions.dependencies import InterDependencies_
 from qcodes.dataset.descriptions.param_spec import ParamSpecBase
 from qcodes.dataset.experiment_container import Experiment, new_experiment
@@ -28,7 +25,11 @@ settings.register_profile("ci", deadline=1000)
 n_experiments = 0
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+    from pathlib import Path
+
     from qcodes.configuration import DotDict
+    from qcodes.dataset.data_set import DataSet
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -44,7 +45,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def default_session_config(
-    tmpdir_factory: pytest.TempdirFactory,
+    tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[None, None, None]:
     """
     Set the config for the test session to be the default config.
@@ -61,7 +62,7 @@ def default_session_config(
     old_config: DotDict | None = copy.deepcopy(qc.config.current_config)
     qc.config.current_config = copy.deepcopy(qc.config.defaults)
 
-    tmp_path = tmpdir_factory.mktemp("qcodes_tests")
+    tmp_path = tmp_path_factory.mktemp("qcodes_tests")
 
     file_name = str(tmp_path / "user_config.json")
     file_name_schema = str(tmp_path / "user_config_schema.json")

@@ -13,14 +13,20 @@ import os
 import pkgutil
 import warnings
 from collections import deque
-from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from copy import copy, deepcopy
 from functools import partial
 from io import StringIO
-from pathlib import Path
-from types import ModuleType
-from typing import IO, Any, AnyStr, ClassVar, NoReturn, Union, cast, overload
+from typing import (
+    IO,
+    TYPE_CHECKING,
+    Any,
+    AnyStr,
+    ClassVar,
+    NoReturn,
+    cast,
+    overload,
+)
 
 import jsonschema
 import jsonschema.exceptions
@@ -40,21 +46,33 @@ from qcodes.parameters import (
 )
 from qcodes.utils import (
     DelegateAttributes,
-    checked_getattr,
+    checked_getattr_indexed,
     get_qcodes_path,
     get_qcodes_user_path,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+    from pathlib import Path
+    from types import ModuleType
+
 log = logging.getLogger(__name__)
 
-PARAMETER_ATTRIBUTES = ['label', 'unit', 'scale', 'inter_delay', 'post_delay',
-                        'step', 'offset']
+PARAMETER_ATTRIBUTES = [
+    "label",
+    "unit",
+    "scale",
+    "inter_delay",
+    "post_delay",
+    "step",
+    "offset",
+]
 
 SCHEMA_TEMPLATE_PATH = os.path.join(
-    get_qcodes_path('dist', 'schemas'),
-    'station-template.schema.json')
-SCHEMA_PATH = get_qcodes_user_path('schemas', 'station.schema.json')
-STATION_YAML_EXT = '*.station.yaml'
+    get_qcodes_path("dist", "schemas"), "station-template.schema.json"
+)
+SCHEMA_PATH = get_qcodes_user_path("schemas", "station.schema.json")
+STATION_YAML_EXT = "*.station.yaml"
 
 
 def get_config_enable_forced_reconnect() -> bool:
@@ -73,7 +91,7 @@ def get_config_use_monitor() -> str | None:
     return qcodes.config["station"]["use_monitor"]
 
 
-ChannelOrInstrumentBase = Union[InstrumentBase, ChannelTuple]
+ChannelOrInstrumentBase = InstrumentBase | ChannelTuple
 
 
 class ValidationWarning(Warning):
@@ -88,7 +106,6 @@ class StationConfig(dict[Any, Any]):
 
 
 class Station(Metadatable, DelegateAttributes):
-
     """
     A representation of the entire physical setup.
 
@@ -158,7 +175,9 @@ class Station(Metadatable, DelegateAttributes):
         if config_file is None:
             self.config_file = []
         elif isinstance(config_file, str):
-            self.config_file = [config_file, ]
+            self.config_file = [
+                config_file,
+            ]
         else:
             self.config_file = list(config_file)
 
@@ -189,12 +208,13 @@ class Station(Metadatable, DelegateAttributes):
 
         Returns:
             dict: Base snapshot.
+
         """
         snap: dict[str, Any] = {
-            'instruments': {},
-            'parameters': {},
-            'components': {},
-            'config': self.config,
+            "instruments": {},
+            "parameters": {},
+            "components": {},
+            "config": self.config,
         }
 
         components_to_remove = []
@@ -205,16 +225,14 @@ class Station(Metadatable, DelegateAttributes):
                 # station object, hence this 'if' allows to avoid
                 # snapshotting instruments that are already closed
                 if Instrument.is_valid(itm):
-                    snap['instruments'][name] = itm.snapshot(update=update)
+                    snap["instruments"][name] = itm.snapshot(update=update)
                 else:
                     components_to_remove.append(name)
-            elif isinstance(itm, (Parameter,
-                                  ManualParameter
-                                  )):
+            elif isinstance(itm, (Parameter, ManualParameter)):
                 if not itm.snapshot_exclude:
-                    snap['parameters'][name] = itm.snapshot(update=update)
+                    snap["parameters"][name] = itm.snapshot(update=update)
             else:
-                snap['components'][name] = itm.snapshot(update=update)
+                snap["components"][name] = itm.snapshot(update=update)
 
         for c in components_to_remove:
             self.remove_component(c)
@@ -239,10 +257,10 @@ class Station(Metadatable, DelegateAttributes):
         Returns:
             str: The name assigned this component, which may have been changed
                 to make it unique among previously added components.
+
         """
         try:
-            if not (isinstance(component, Parameter)
-                    and component.snapshot_exclude):
+            if not (isinstance(component, Parameter) and component.snapshot_exclude):
                 component.snapshot(update=update_snapshot)
         except Exception:
             pass
@@ -252,7 +270,8 @@ class Station(Metadatable, DelegateAttributes):
         if namestr in self.components.keys():
             raise RuntimeError(
                 f'Cannot add component "{namestr}", because a '
-                'component of that name is already registered to the station')
+                "component of that name is already registered to the station"
+            )
         self.components[namestr] = component
         return namestr
 
@@ -270,12 +289,13 @@ class Station(Metadatable, DelegateAttributes):
         Raises:
             KeyError: If a component with the given name is not part of this
                 station.
+
         """
         try:
             return self.components.pop(name)
         except KeyError as e:
             if name in str(e):
-                raise KeyError(f'Component {name} is not part of the station')
+                raise KeyError(f"Component {name} is not part of the station")
             else:
                 raise e
 
@@ -295,6 +315,7 @@ class Station(Metadatable, DelegateAttributes):
         Raises:
             KeyError: If a component with the given name is not part of this
                 station.
+
         """
 
         def find_component(
@@ -362,8 +383,7 @@ class Station(Metadatable, DelegateAttributes):
         if filename is None:
             return None
         search_list = [filename]
-        if (not os.path.isabs(filename) and
-                get_config_default_folder() is not None):
+        if not os.path.isabs(filename) and get_config_default_folder() is not None:
             config_folder = cast(str, get_config_default_folder())
             search_list += [os.path.join(config_folder, filename)]
         for p in search_list:
@@ -392,18 +412,17 @@ class Station(Metadatable, DelegateAttributes):
             else:
                 if get_config_default_file() is not None:
                     log.warning(
-                        'Could not load default config for Station: \n'
-                        f'File {get_config_default_file()} not found. \n'
-                        'You can change the default config file in '
-                        '`qcodesrc.json`.')
+                        "Could not load default config for Station: \n"
+                        f"File {get_config_default_file()} not found. \n"
+                        "You can change the default config file in "
+                        "`qcodesrc.json`."
+                    )
                 return
 
         with open(path) as f:
             self.load_config(f)
 
-    def load_config_files(self,
-                          *filenames: str
-                          ) -> None:
+    def load_config_files(self, *filenames: str) -> None:
         """
         Loads configuration from multiple YAML files after merging them
         into one. If `filenames` are not specified the default file name from
@@ -458,16 +477,21 @@ class Station(Metadatable, DelegateAttributes):
 
             # add shortcut methods
             for instrument_name in self._instrument_config.keys():
-                method_name = f'load_{instrument_name}'
+                method_name = f"load_{instrument_name}"
                 if method_name.isidentifier():
-                    setattr(self, method_name, partial(
-                        self.load_instrument, identifier=instrument_name))
+                    setattr(
+                        self,
+                        method_name,
+                        partial(self.load_instrument, identifier=instrument_name),
+                    )
                     self._added_methods.append(method_name)
                 else:
-                    log.warning(f'Invalid identifier: '
-                                f'for the instrument {instrument_name} no '
-                                f'lazy loading method {method_name} could '
-                                'be created in the Station.')
+                    log.warning(
+                        f"Invalid identifier: "
+                        f"for the instrument {instrument_name} no "
+                        f"lazy loading method {method_name} could "
+                        "be created in the Station."
+                    )
 
         # Load template schema, and thereby don't fail on instruments that are
         # not included in the user schema.
@@ -484,7 +508,7 @@ class Station(Metadatable, DelegateAttributes):
 
         self._config = yaml
 
-        self._instrument_config = self._config['instruments']
+        self._instrument_config = self._config["instruments"]
         update_station_configuration_snapshot()
         update_load_instrument_methods()
 
@@ -497,17 +521,22 @@ class Station(Metadatable, DelegateAttributes):
         if isinstance(instrument, str):
             instrument = Instrument.find_instrument(instrument)
 
-        self._monitor_parameters = [v for v in self._monitor_parameters
-                                    if v.root_instrument is not instrument]
+        self._monitor_parameters = [
+            v for v in self._monitor_parameters if v.root_instrument is not instrument
+        ]
         # remove instrument from station snapshot
         self.remove_component(instrument.name)
         # del will remove weakref and close the instrument
         instrument.close()
         del instrument
 
-    def load_instrument(self, identifier: str,
-                        revive_instance: bool = False,
-                        **kwargs: Any) -> Instrument:
+    def load_instrument(
+        self,
+        identifier: str,
+        revive_instance: bool = False,
+        update_snapshot: bool = True,
+        **kwargs: Any,
+    ) -> Instrument:
         """
         Creates an :class:`~.Instrument` instance as described by the
         loaded configuration file.
@@ -517,8 +546,11 @@ class Station(Metadatable, DelegateAttributes):
                 configuration file, which identifies the instrument to be added.
             revive_instance: If ``True``, try to return an instrument with the
                 specified name instead of closing it and creating a new one.
+            update_snapshot: Immediately update the snapshot
+                of the instrument as it is added to the Station.
             **kwargs: Additional keyword arguments that get passed on to the
                 ``__init__``-method of the instrument to be added.
+
         """
         # try to revive the instrument
         if revive_instance and Instrument.exist(identifier):
@@ -529,29 +561,30 @@ class Station(Metadatable, DelegateAttributes):
         # little slower but makes the overall workflow more convenient.
         self.load_config_files(*self.config_file)
 
-
         # load from config
         if identifier not in self._instrument_config.keys():
-            raise RuntimeError(f'Instrument {identifier} not found in '
-                               'instrument config file')
+            raise RuntimeError(
+                f"Instrument {identifier} not found in instrument config file"
+            )
         instr_cfg = self._instrument_config[identifier]
 
         # TODO: add validation of config for better verbose errors:
 
         # check if instrument is already defined and close connection
-        if instr_cfg.get('enable_forced_reconnect',
-                         get_config_enable_forced_reconnect()):
+        if instr_cfg.get(
+            "enable_forced_reconnect", get_config_enable_forced_reconnect()
+        ):
             with suppress(KeyError):
                 self.close_and_remove_instrument(identifier)
 
         # instantiate instrument
-        init_kwargs = instr_cfg.get('init', {})
+        init_kwargs = instr_cfg.get("init", {})
         # somebody might have a empty init section in the config
         init_kwargs = {} if init_kwargs is None else init_kwargs
-        if 'address' in instr_cfg:
-            init_kwargs['address'] = instr_cfg['address']
-        if 'port' in instr_cfg:
-            init_kwargs['port'] = instr_cfg['port']
+        if "address" in instr_cfg:
+            init_kwargs["address"] = instr_cfg["address"]
+        if "port" in instr_cfg:
+            init_kwargs["port"] = instr_cfg["port"]
         # make explicitly passed arguments override the ones from the config
         # file.
         # We are mutating the dict below
@@ -561,7 +594,7 @@ class Station(Metadatable, DelegateAttributes):
         # instrument instances via kwargs
         instr_kwargs = deepcopy(init_kwargs)
         instr_kwargs.update(kwargs)
-        name = instr_kwargs.pop('name', identifier)
+        name = instr_kwargs.pop("name", identifier)
 
         module_name = ".".join(instr_cfg["type"].split(".")[:-1])
         instr_class_name = instr_cfg["type"].split(".")[-1]
@@ -570,44 +603,45 @@ class Station(Metadatable, DelegateAttributes):
         instr = instr_class(name=name, **instr_kwargs)
 
         def resolve_instrument_identifier(
-            instrument: ChannelOrInstrumentBase,
-            identifier: str
+            instrument: ChannelOrInstrumentBase, identifier: str
         ) -> ChannelOrInstrumentBase:
             """
             Get the instrument, channel or channel_list described by a nested
             string.
 
-            E.g: 'dac.ch1' will return the instance of ch1.
+            E.g: 'dac.ch1' will return the instance of ch1, 'dac.channels[0]'
+            returns the first item of the channels property.
             """
             levels = identifier.split(".")
             level = levels[0]
             try:
                 for level in levels:
-                    instrument = checked_getattr(
+                    instrument = checked_getattr_indexed(
                         instrument, level, (InstrumentBase, ChannelTuple)
                     )
             except TypeError:
                 raise RuntimeError(
-                    f'Cannot resolve `{level}` in {identifier} to an '
-                    f'instrument/channel for base instrument '
-                    f'{instrument!r}.')
+                    f"Cannot resolve `{level}` in {identifier} to an "
+                    f"instrument/channel for base instrument "
+                    f"{instrument!r}."
+                )
             return instrument
 
         def resolve_parameter_identifier(
-            instrument: ChannelOrInstrumentBase,
-            identifier: str
+            instrument: ChannelOrInstrumentBase, identifier: str
         ) -> ParameterBase:
-            parts = identifier.split('.')
+            parts = identifier.split(".")
             if len(parts) > 1:
                 instrument = resolve_instrument_identifier(
-                    instrument,
-                    '.'.join(parts[:-1]))
+                    instrument, ".".join(parts[:-1])
+                )
             try:
-                return checked_getattr(instrument, parts[-1], ParameterBase)
+                return checked_getattr_indexed(instrument, parts[-1], ParameterBase)
             except TypeError:
                 raise RuntimeError(
-                    f'Cannot resolve parameter identifier `{identifier}` to '
-                    f'a parameter on instrument {instrument!r}.')
+                    f"Cannot resolve parameter identifier `{identifier}` to "
+                    f"a parameter on instrument {instrument!r}."
+                )
 
         def setup_parameter_from_dict(
             parameter: ParameterBase, options: dict[str, Any]
@@ -617,20 +651,22 @@ class Station(Metadatable, DelegateAttributes):
                     # set the attributes of the parameter, that map 1 to 1
                     setattr(parameter, attr, val)
                 # extra attributes that need parsing
-                elif attr == 'limits':
+                elif attr == "limits":
                     lower, upper = val
                     parameter.vals = validators.Numbers(lower, upper)
-                elif attr == 'monitor' and val is True:
+                elif attr == "monitor" and val is True:
                     if isinstance(parameter, Parameter):
                         self._monitor_parameters.append(parameter)
                     else:
-                        raise RuntimeError(f"Trying to add {parameter} to "
-                                           f"monitored parameters. But it's "
-                                           f"not a Parameter but a"
-                                           f" {type(parameter)}")
-                elif attr == 'alias':
+                        raise RuntimeError(
+                            f"Trying to add {parameter} to "
+                            f"monitored parameters. But it's "
+                            f"not a Parameter but a"
+                            f" {type(parameter)}"
+                        )
+                elif attr == "alias":
                     setattr(parameter.instrument, val, parameter)
-                elif attr == 'initial_value':
+                elif attr == "initial_value":
                     # skip value attribute so that it gets set last
                     # when everything else has been set up
                     pass
@@ -649,33 +685,36 @@ class Station(Metadatable, DelegateAttributes):
             options = copy(options)
             param_type: type = ParameterBase
             kwargs = {}
-            if 'source' in options:
+            if "source" in options:
                 param_type = DelegateParameter
-                kwargs['source'] = resolve_parameter_identifier(
-                    instr.root_instrument,
-                    options['source'])
-                options.pop('source')
+                kwargs["source"] = resolve_parameter_identifier(
+                    instr.root_instrument, options["source"]
+                )
+                options.pop("source")
             instr.add_parameter(name, param_type, **kwargs)
             setup_parameter_from_dict(instr.parameters[name], options)
 
         def update_monitor() -> None:
-            if ((self.use_monitor is None and get_config_use_monitor())
-                    or self.use_monitor):
+            if (
+                self.use_monitor is None and get_config_use_monitor()
+            ) or self.use_monitor:
                 # restart Monitor
                 Monitor(*self._monitor_parameters)
 
-        for name, options in instr_cfg.get('parameters', {}).items():
+        for name, options in instr_cfg.get("parameters", {}).items():
             parameter = resolve_parameter_identifier(instr, name)
             setup_parameter_from_dict(parameter, options)
-        for name, options in instr_cfg.get('add_parameters', {}).items():
-            parts = name.split('.')
+        for name, options in instr_cfg.get("add_parameters", {}).items():
+            parts = name.split(".")
             local_instr = (
-                instr if len(parts) < 2 else
-                resolve_instrument_identifier(instr, '.'.join(parts[:-1])))
+                instr
+                if len(parts) < 2
+                else resolve_instrument_identifier(instr, ".".join(parts[:-1]))
+            )
             if isinstance(local_instr, ChannelTuple):
                 raise RuntimeError("A parameter cannot be added to an ChannelTuple")
             add_parameter_from_dict(local_instr, parts[-1], options)
-        self.add_component(instr)
+        self.add_component(instr, update_snapshot=update_snapshot)
         update_monitor()
         return instr
 
@@ -684,32 +723,28 @@ class Station(Metadatable, DelegateAttributes):
         self,
         only_names: None,
         only_types: Iterable[str],
-    ) -> tuple[str, ...]:
-        ...
+    ) -> tuple[str, ...]: ...
 
     @overload
     def load_all_instruments(
         self,
         only_names: Iterable[str],
         only_types: None,
-    ) -> tuple[str, ...]:
-        ...
+    ) -> tuple[str, ...]: ...
 
     @overload
     def load_all_instruments(
         self,
         only_names: None,
         only_types: None,
-    ) -> tuple[str, ...]:
-        ...
+    ) -> tuple[str, ...]: ...
 
     @overload
     def load_all_instruments(
         self,
         only_names: Iterable[str],
         only_types: Iterable[str],
-    ) -> NoReturn:
-        ...
+    ) -> NoReturn: ...
 
     def load_all_instruments(
         self,
@@ -734,6 +769,7 @@ class Station(Metadatable, DelegateAttributes):
 
         Returns:
             The names of the loaded instruments
+
         """
         config = self.config
         if config is None:
@@ -787,15 +823,17 @@ def update_config_schema(
         for s in submodules:
             try:
                 ms = inspect.getmembers(
-                    importlib.import_module(s.name),
-                    inspect.isclass)
+                    importlib.import_module(s.name), inspect.isclass
+                )
             except Exception:
                 ms = []
             new_members = [
                 f"{instr[1].__module__}.{instr[1].__name__}"
                 for instr in ms
-                if (issubclass(instr[1], InstrumentBase) and
-                    instr[1].__module__.startswith(module.__name__))
+                if (
+                    issubclass(instr[1], InstrumentBase)
+                    and instr[1].__module__.startswith(module.__name__)
+                )
             ]
             res.update(new_members)
         return tuple(res)
@@ -803,13 +841,13 @@ def update_config_schema(
     def update_schema_file(
         template_path: str, output_path: str, instrument_names: tuple[str, ...]
     ) -> None:
-        with open(template_path, 'r+') as f:
+        with open(template_path, "r+") as f:
             data = json.load(f)
-        data['definitions']['instruments']['enum'] = instrument_names
+        data["definitions"]["instruments"]["enum"] = instrument_names
         if os.path.exists(output_path):
             os.remove(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(data, f, indent=4)
 
     additional_instrument_modules = additional_instrument_modules or []
@@ -836,9 +874,11 @@ def _merge_yamls(*yamls: str | Path) -> str:
 
     Args:
         yamls: string or Path to yaml files separated by comma.
+
     Returns:
         Full yaml file stored in the memory. Returns an empty string
         if no files are given.
+
     """
     import ruamel.yaml  # lazy import
 

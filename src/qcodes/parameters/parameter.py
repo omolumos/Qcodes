@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from types import MethodType
+from typing import TYPE_CHECKING, Any, Literal
 
 from .command import Command
 from .parameter_base import ParamDataType, ParameterBase, ParamRawDataType
 from .sweep_values import SweepFixedValues
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from qcodes.instrument.base import InstrumentBase
     from qcodes.logger.instrument_logger import InstrumentLoggerAdapter
     from qcodes.validators import Validator
@@ -162,6 +165,7 @@ class Parameter(ParameterBase):
 
         bind_to_instrument: Should the parameter be registered as a delegate attribute
             on the instrument passed via the instrument argument.
+
     """
 
     def __init__(
@@ -180,7 +184,7 @@ class Parameter(ParameterBase):
         bind_to_instrument: bool = True,
         **kwargs: Any,
     ) -> None:
-        def _get_manual_parameter() -> ParamRawDataType:
+        def _get_manual_parameter(self: Parameter) -> ParamRawDataType:
             if self.root_instrument is not None:
                 mylogger: InstrumentLoggerAdapter | logging.Logger = (
                     self.root_instrument.log
@@ -194,7 +198,9 @@ class Parameter(ParameterBase):
             )
             return self.cache.raw_value
 
-        def _set_manual_parameter(x: ParamRawDataType) -> ParamRawDataType:
+        def _set_manual_parameter(
+            self: Parameter, x: ParamRawDataType
+        ) -> ParamRawDataType:
             if self.root_instrument is not None:
                 mylogger: InstrumentLoggerAdapter | logging.Logger = (
                     self.root_instrument.log
@@ -204,13 +210,13 @@ class Parameter(ParameterBase):
             mylogger.debug(
                 "Setting raw value of parameter: %s to %s", self.full_name, x
             )
+            self.cache._set_from_raw_value(x)
             return x
 
         if instrument is not None and bind_to_instrument:
             existing_parameter = instrument.parameters.get(name, None)
 
             if existing_parameter:
-
                 # this check is redundant since its also in the baseclass
                 # but if we do not put it here it would be an api break
                 # as parameter duplication check won't be done first,
@@ -263,7 +269,8 @@ class Parameter(ParameterBase):
             )
         elif not self.gettable and get_cmd is not False:
             if get_cmd is None:
-                self.get_raw: Callable[[], Any] = _get_manual_parameter
+                # ignore typeerror since mypy does not allow setting a method dynamically
+                self.get_raw = MethodType(_get_manual_parameter, self)  # type: ignore[method-assign]
             else:
                 if isinstance(get_cmd, str) and instrument is None:
                     raise TypeError(
@@ -273,14 +280,18 @@ class Parameter(ParameterBase):
                     )
 
                 exec_str_ask = getattr(instrument, "ask", None) if instrument else None
-
-                self.get_raw = Command(
+                # TODO get_raw should also be a method here. This should probably be done by wrapping
+                # it with MethodType like above
+                # ignore typeerror since mypy does not allow setting a method dynamically
+                self.get_raw = Command(  # type: ignore[method-assign]
                     arg_count=0,
                     cmd=get_cmd,
                     exec_str=exec_str_ask,
                 )
             self._gettable = True
-            self.get = self._wrap_get(self.get_raw)
+            # mypy resolves the type of self.get_raw to object here.
+            # this may be resolvable if Command above is correctly wrapped in MethodType
+            self.get = self._wrap_get(self.get_raw)  # type: ignore[arg-type]
 
         if self.settable and set_cmd not in (None, False):
             raise TypeError(
@@ -290,7 +301,8 @@ class Parameter(ParameterBase):
             )
         elif not self.settable and set_cmd is not False:
             if set_cmd is None:
-                self.set_raw: Callable[..., Any] = _set_manual_parameter
+                # ignore typeerror since mypy does not allow setting a method dynamically
+                self.set_raw = MethodType(_set_manual_parameter, self)  # type: ignore[method-assign]
             else:
                 if isinstance(set_cmd, str) and instrument is None:
                     raise TypeError(
@@ -302,7 +314,10 @@ class Parameter(ParameterBase):
                 exec_str_write = (
                     getattr(instrument, "write", None) if instrument else None
                 )
-                self.set_raw = Command(
+                # TODO get_raw should also be a method here. This should probably be done by wrapping
+                # it with MethodType like above
+                # ignore typeerror since mypy does not allow setting a method dynamically
+                self.set_raw = Command(  # type: ignore[assignment]
                     arg_count=1, cmd=set_cmd, exec_str=exec_str_write
                 )
             self._settable = True
@@ -390,6 +405,7 @@ class Parameter(ParameterBase):
 
         Args:
             value: Value to be added to the parameter.
+
         """
         self.set(self.get() + value)
 
@@ -422,6 +438,7 @@ class Parameter(ParameterBase):
             [5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
             >>> sweep(15, 10.5, step=1.5)
             >[15.0, 13.5, 12.0, 10.5]
+
         """
         return SweepFixedValues(self, start=start, stop=stop, step=step, num=num)
 

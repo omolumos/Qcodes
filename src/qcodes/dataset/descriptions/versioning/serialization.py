@@ -29,12 +29,12 @@ The names of the functions in this module follow the "to_*"/"from_*"
 convention where "*" stands for the storage format. Also note the
 "as_version", "for_storage", and "to_current" suffixes.
 """
+
 from __future__ import annotations
 
 import io
 import json
-from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from .. import rundescriber as current
 from .converters import (
@@ -59,6 +59,9 @@ from .rundescribertypes import (
     RunDescriberV3Dict,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 STORAGE_VERSION = 3
 # the version of :class:`RunDescriber` object that is used by the data storage
 # infrastructure of :mod:`qcodes`
@@ -81,7 +84,6 @@ _converters: dict[tuple[int, int], Callable[..., Any]] = {
     (3, 1): v3_to_v1,
     (3, 2): v3_to_v2,
     (3, 3): lambda x: x,
-
 }
 
 
@@ -89,7 +91,7 @@ def from_dict_to_current(dct: RunDescriberDicts) -> current.RunDescriber:
     """
     Convert a dict into a RunDescriber of the current version
     """
-    dct_version = dct['version']
+    dct_version = dct["version"]
     if dct_version == 0:
         return current.RunDescriber._from_dict(cast(RunDescriberV0Dict, dct))
     elif dct_version == 1:
@@ -99,11 +101,12 @@ def from_dict_to_current(dct: RunDescriberDicts) -> current.RunDescriber:
     elif dct_version >= 3:
         return current.RunDescriber._from_dict(cast(RunDescriberV3Dict, dct))
     else:
-        raise RuntimeError(f"Unknown version of run describer dictionary, can't deserialize. The dictionary is {dct!r}")
+        raise RuntimeError(
+            f"Unknown version of run describer dictionary, can't deserialize. The dictionary is {dct!r}"
+        )
 
 
-def to_dict_as_version(desc: current.RunDescriber,
-                       version: int) -> RunDescriberDicts:
+def to_dict_as_version(desc: current.RunDescriber, version: int) -> RunDescriberDicts:
     """
     Convert the given RunDescriber into a dictionary that represents a
     RunDescriber of the given version

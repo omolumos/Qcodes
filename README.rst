@@ -1,6 +1,6 @@
 QCoDeS |PyPi| |DOCS| |PyPI python versions| |DOI|
 =================================================
-|Build Status Github| |Build Status Github Docs| |Codacy badge| |OpenSSF|
+|Build Status Github| |Build Status Github Docs| |Ruff| |OpenSSF|
 
 QCoDeS is a Python-based data acquisition framework developed by the
 Copenhagen / Delft / Sydney / Microsoft quantum computing consortium.
@@ -15,7 +15,7 @@ To get a feeling of QCoDeS read
 and/or browse the Jupyter notebooks in `docs/examples
 <https://github.com/QCoDeS/Qcodes/tree/main/docs/examples>`__ .
 
-QCoDeS is compatible with Python 3.9+ (3.9 soon to be deprecated). It is
+QCoDeS is compatible with Python 3.10+. It is
 primarily intended for use from Jupyter notebooks, but can be used from
 traditional terminal-based shells and in stand-alone scripts as well. The
 features in `qcodes.utils.magic` are exclusively for Jupyter notebooks.
@@ -69,7 +69,7 @@ The modules ``qcodes.data``, ``qcodes.plots``, ``qcodes.actions``,
 and ``qcodes.utils.magic`` that were part of QCoDeS until version 0.37.0.
 have been moved into an independent package called qcodes_loop.
 Please see it's `repository <https://github.com/QCoDeS/Qcodes_loop/>`_ and
-`documentation <https://microsoft.github.io/Qcodes_loop/>`_ for more information.
+`documentation <https://qcodes.github.io/Qcodes_loop/index.html>`_ for more information.
 
 For the time being it is possible to automatically install the qcodes_loop
 package when installing qcodes by executing ``pip install qcodes[loop]``.
@@ -91,7 +91,13 @@ https://github.com/QCoDeS/Qcodes_contrib_drivers
 See `Contributing <https://github.com/QCoDeS/Qcodes/tree/main/CONTRIBUTING.rst>`__ for general information about bug/issue
 reports, contributing code, style, and testing.
 
+Trademarks
+==========
 
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or
+logos is subject to and must follow Microsoft’s Trademark & Brand Guidelines. Use of Microsoft trademarks
+or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party’s policies.
 
 License
 =======
@@ -99,12 +105,12 @@ License
 See `License <https://github.com/QCoDeS/Qcodes/tree/main/LICENSE>`__.
 
 .. |Build Status Github| image:: https://github.com/QCoDeS/Qcodes/workflows/Run%20mypy%20and%20pytest/badge.svg
-    :target: https://github.com/QCoDeS/Qcodes/actions?query=workflow%3A%22Run+mypy+and+pytest%22
+    :target: https://github.com/QCoDeS/Qcodes/actions?query=workflow%3A%22Run+mypy+and+pytest%22+branch%3Amain
 .. |Build Status Github Docs| image:: https://github.com/QCoDeS/Qcodes/workflows/build%20docs/badge.svg
-    :target: https://github.com/QCoDeS/Qcodes/actions?query=workflow%3A%22build+docs%22
-.. |Codacy badge| image:: https://api.codacy.com/project/badge/Grade/6c9e0e5712bf4c6285d6f717aa8e84fa
-    :alt: Codacy Badge
-    :target: https://app.codacy.com/manual/qcodes/Qcodes?utm_source=github.com&utm_medium=referral&utm_content=QCoDeS/Qcodes&utm_campaign=Badge_Grade_Settings
+    :target: https://github.com/QCoDeS/Qcodes/actions?query=workflow%3A%22build+docs%22+branch%3Amain
+.. |Ruff|  image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+    :target: https://github.com/astral-sh/ruff
+    :alt: Ruff
 .. |PyPi| image:: https://badge.fury.io/py/qcodes.svg
     :target: https://badge.fury.io/py/qcodes
 .. |PyPI python versions| image:: https://img.shields.io/pypi/pyversions/qcodes.svg

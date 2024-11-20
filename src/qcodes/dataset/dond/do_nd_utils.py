@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.colorbar
 
+    from qcodes.dataset.measurements import Measurement
+
 from qcodes.dataset.data_set_protocol import DataSetProtocol
-from qcodes.dataset.measurements import Measurement
 from qcodes.dataset.plotting import plot_and_save_image
 from qcodes.parameters import MultiParameter, ParameterBase
 
@@ -22,21 +23,21 @@ log = logging.getLogger(__name__)
 ActionsT = Sequence[Callable[[], None]]
 BreakConditionT = Callable[[], bool]
 
-ParamMeasT = Union[ParameterBase, Callable[[], None]]
+ParamMeasT = ParameterBase | Callable[[], None]
 
 AxesTuple = tuple["matplotlib.axes.Axes", "matplotlib.colorbar.Colorbar"]
 AxesTupleList = tuple[
-    list["matplotlib.axes.Axes"], list[Optional["matplotlib.colorbar.Colorbar"]]
+    list["matplotlib.axes.Axes"], list["matplotlib.colorbar.Colorbar | None"]
 ]
 AxesTupleListWithDataSet = tuple[
     DataSetProtocol,
-    tuple[Optional["matplotlib.axes.Axes"], ...],
-    tuple[Optional["matplotlib.colorbar.Colorbar"], ...],
+    tuple["matplotlib.axes.Axes | None", ...],
+    tuple["matplotlib.colorbar.Colorbar | None", ...],
 ]
 MultiAxesTupleListWithDataSet = tuple[
     tuple[DataSetProtocol, ...],
-    tuple[tuple[Optional["matplotlib.axes.Axes"], ...], ...],
-    tuple[tuple[Optional["matplotlib.colorbar.Colorbar"], ...], ...],
+    tuple[tuple["matplotlib.axes.Axes | None", ...], ...],
+    tuple[tuple["matplotlib.colorbar.Colorbar | None", ...], ...],
 ]
 
 
@@ -44,7 +45,7 @@ class BreakConditionInterrupt(Exception):
     pass
 
 
-MeasInterruptT = Union[KeyboardInterrupt, BreakConditionInterrupt, None]
+MeasInterruptT = KeyboardInterrupt | BreakConditionInterrupt | None
 
 
 def _register_parameters(
@@ -89,6 +90,7 @@ def _handle_plotting(
         data: a dataset to generate plots from
             as plot.
         do_plot: Should a plot be produced
+        interrupted: If the measurement was interrupted, this will be the exception.
 
     """
     res: AxesTupleListWithDataSet
@@ -118,14 +120,26 @@ def _register_actions(
 
 
 @contextmanager
-def catch_interrupts() -> Iterator[Callable[[], MeasInterruptT]]:
-    interrupt_exception = None
+def catch_interrupts() -> Iterator[Callable[[], MeasInterruptT | None]]:
+    interrupt_exception: MeasInterruptT | None = None
+    interrupt_raised = False
 
-    def get_interrupt_exception() -> MeasInterruptT:
+    def get_interrupt_exception() -> MeasInterruptT | None:
         nonlocal interrupt_exception
         return interrupt_exception
 
     try:
         yield get_interrupt_exception
-    except (KeyboardInterrupt, BreakConditionInterrupt) as e:
+    except KeyboardInterrupt as e:
         interrupt_exception = e
+        interrupt_raised = True
+        raise  # Re-raise KeyboardInterrupt
+    except BreakConditionInterrupt as e:
+        interrupt_exception = e
+        interrupt_raised = True
+        # Don't re-raise BreakConditionInterrupt
+    finally:
+        if interrupt_raised:
+            log.warning(
+                f"Measurement has been interrupted, data may be incomplete: {interrupt_exception}"
+            )

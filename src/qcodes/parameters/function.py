@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from qcodes.metadatable import MetadatableWithName
@@ -9,6 +8,8 @@ from qcodes.validators import Validator, validate_all
 from .command import Command
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from qcodes.instrument import InstrumentBase
 
 
@@ -80,7 +81,7 @@ class Function(MetadatableWithName):
         arg_parser: Callable[..., Any] | None = None,
         return_parser: Callable[..., Any] | None = None,
         docstring: str | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
 
@@ -128,6 +129,7 @@ class Function(MetadatableWithName):
 
         Args:
             *args: Variable length argument list, passed to the call_cmd
+
         """
         if self._instrument:
             func_name = (
@@ -143,9 +145,7 @@ class Function(MetadatableWithName):
 
         if len(args) != self._arg_count:
             raise TypeError(
-                "{} called with {} args but requires {}".format(
-                    func_name, len(args), self._arg_count
-                )
+                f"{func_name} called with {len(args)} args but requires {self._arg_count}"
             )
 
         validate_all(*zip(self._args, args), context="Function: " + func_name)
@@ -160,6 +160,7 @@ class Function(MetadatableWithName):
 
         Args:
            *args: argument to pass to Command __call__ function
+
         """
         return self.__call__(*args)
 

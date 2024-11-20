@@ -15,32 +15,24 @@ class _CacheProtocol(Protocol):
     """
 
     @property
-    def raw_value(self) -> ParamRawDataType:
-        ...
+    def raw_value(self) -> ParamRawDataType: ...
 
     @property
-    def timestamp(self) -> datetime | None:
-        ...
+    def timestamp(self) -> datetime | None: ...
 
     @property
-    def max_val_age(self) -> float | None:
-        ...
+    def max_val_age(self) -> float | None: ...
 
     @property
-    def valid(self) -> bool:
-        ...
+    def valid(self) -> bool: ...
 
-    def invalidate(self) -> None:
-        ...
+    def invalidate(self) -> None: ...
 
-    def set(self, value: ParamDataType) -> None:
-        ...
+    def set(self, value: ParamDataType) -> None: ...
 
-    def _set_from_raw_value(self, raw_value: ParamRawDataType) -> None:
-        ...
+    def _set_from_raw_value(self, raw_value: ParamRawDataType) -> None: ...
 
-    def get(self, get_if_invalid: bool = True) -> ParamDataType:
-        ...
+    def get(self, get_if_invalid: bool = True) -> ParamDataType: ...
 
     def _update_with(
         self,
@@ -48,11 +40,9 @@ class _CacheProtocol(Protocol):
         value: ParamDataType,
         raw_value: ParamRawDataType,
         timestamp: datetime | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def __call__(self) -> ParamDataType:
-        ...
+    def __call__(self) -> ParamDataType: ...
 
 
 class _Cache:
@@ -72,6 +62,7 @@ class _Cache:
             update the cached value. If it is ``None``, this behavior is
             disabled. ``max_val_age`` should not be used for a parameter
             that does not have a get function.
+
     """
 
     def __init__(self, parameter: ParameterBase, max_val_age: float | None = None):
@@ -139,6 +130,7 @@ class _Cache:
 
         Args:
             value: new value for the parameter
+
         """
         self._parameter.validate(value)
         raw_value = self._parameter._from_value_to_raw_value(value)
@@ -166,6 +158,7 @@ class _Cache:
             raw_value: new raw value of the parameter
             timestamp: new timestamp of the parameter; if ``None``,
                 then timestamp of "now" is used
+
         """
         self._value = value
         self._raw_value = raw_value
@@ -207,6 +200,7 @@ class _Cache:
                 example, due to ``max_val_age``, because the parameter has
                 never been captured, or because the parameter was marked
                 invalid)
+
         """
 
         gettable = self._parameter.gettable

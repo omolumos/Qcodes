@@ -1,11 +1,29 @@
-from collections.abc import Iterable
 from enum import IntFlag
 from itertools import takewhile
-from typing import Any, Optional, TextIO, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    SupportsBytes,
+    SupportsIndex,
+    TextIO,
+    cast,
+)
 
-from qcodes.instrument import ChannelList, InstrumentChannel, VisaInstrument
-from qcodes.parameters import Group, GroupParameter
+from qcodes.instrument import (
+    ChannelList,
+    InstrumentBaseKWArgs,
+    InstrumentChannel,
+    VisaInstrument,
+    VisaInstrumentKWArgs,
+)
+from qcodes.parameters import Group, GroupParameter, Parameter
 from qcodes.validators import Enum, Numbers
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from typing_extensions import Buffer, Self, Unpack
 
 
 def _read_curve_file(curve_file: TextIO) -> dict[Any, Any]:
@@ -23,7 +41,7 @@ def _read_curve_file(curve_file: TextIO) -> dict[Any, Any]:
     def split_data_line(line: str, parser: type = str) -> list[Any]:
         return [parser(i) for i in line.split("  ") if i != ""]
 
-    def strip(strings: Iterable[str]) -> tuple[str, ...]:
+    def strip(strings: "Iterable[str]") -> tuple[str, ...]:
         return tuple(s.strip() for s in strings)
 
     lines = iter(curve_file.readlines())
@@ -71,11 +89,68 @@ class LakeshoreModel325Status(IntFlag):
     """
     IntFlag that defines status codes for Lakeshore Model 325
     """
+
     sensor_units_overrang = 128
     sensor_units_zero = 64
     temp_overrange = 32
     temp_underrange = 16
     invalid_reading = 1
+
+    # we reimplement from_bytes and to_bytes in order to fix docstrings that are incorrectly formatted
+    # this in turn will enable us to build docs with warnings as errors.
+    # This can be removed for python versions where https://github.com/python/cpython/pull/117847
+    # is merged
+    @classmethod
+    def from_bytes(
+        cls,
+        bytes: "Iterable[SupportsIndex] | SupportsBytes | Buffer",
+        byteorder: Literal["big", "little"] = "big",
+        *,
+        signed: bool = False,
+    ) -> "Self":
+        """
+        Return the integer represented by the given array of bytes.
+
+        Args:
+            bytes: Holds the array of bytes to convert.  The argument must either
+                support the buffer protocol or be an iterable object producing bytes.
+                Bytes and bytearray are examples of built-in objects that support the
+                buffer protocol.
+            byteorder: The byte order used to represent the integer.  If byteorder is 'big',
+                the most significant byte is at the beginning of the byte array.  If
+                byteorder is 'little', the most significant byte is at the end of the
+                byte array.  To request the native byte order of the host system, use
+                `sys.byteorder` as the byte order value.  Default is to use 'big'.
+            signed: Indicates whether two\'s complement is used to represent the integer.
+
+        """
+        return super().from_bytes(bytes, byteorder, signed=signed)
+
+    def to_bytes(
+        self,
+        length: SupportsIndex = 1,
+        byteorder: Literal["little", "big"] = "big",
+        *,
+        signed: bool = False,
+    ) -> bytes:
+        """
+        Return an array of bytes representing an integer.
+
+        Args:
+            length: Length of bytes object to use.  An OverflowError is raised if the
+                integer is not representable with the given number of bytes.  Default
+                is length 1.
+            byteorder: The byte order used to represent the integer.  If byteorder is \'big\',
+                the most significant byte is at the beginning of the byte array.  If
+                byteorder is \'little\', the most significant byte is at the end of the
+                byte array. To request the native byte order of the host system, use
+                `sys.byteorder` as the byte order value.  Default is to use \'big\'.
+            signed: Determines whether two\'s complement is used to represent the integer.
+                If signed is False and a negative integer is given, an OverflowError
+                is raised.
+
+        """
+        return super().to_bytes(length, byteorder, signed=signed)
 
 
 class LakeshoreModel325Curve(InstrumentChannel):
@@ -86,31 +161,46 @@ class LakeshoreModel325Curve(InstrumentChannel):
     valid_sensor_units = ("mV", "V", "Ohm", "log Ohm")
     temperature_key = "Temperature (K)"
 
-    def __init__(self, parent: "LakeshoreModel325", index: int) -> None:
-
+    def __init__(
+        self,
+        parent: "LakeshoreModel325",
+        index: int,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
+    ) -> None:
         self._index = index
         name = f"curve_{index}"
-        super().__init__(parent, name)
+        super().__init__(parent, name, **kwargs)
 
-        self.add_parameter("serial_number", parameter_class=GroupParameter)
+        self.serial_number: GroupParameter = self.add_parameter(
+            "serial_number", parameter_class=GroupParameter
+        )
+        """Parameter serial_number"""
 
-        self.add_parameter(
+        self.format: GroupParameter = self.add_parameter(
             "format",
             val_mapping={
                 f"{unt}/K": i + 1 for i, unt in enumerate(self.valid_sensor_units)
             },
             parameter_class=GroupParameter,
         )
+        """Parameter format"""
 
-        self.add_parameter("limit_value", parameter_class=GroupParameter)
+        self.limit_value: GroupParameter = self.add_parameter(
+            "limit_value", parameter_class=GroupParameter
+        )
+        """Parameter limit_value"""
 
-        self.add_parameter(
+        self.coefficient: GroupParameter = self.add_parameter(
             "coefficient",
             val_mapping={"negative": 1, "positive": 2},
             parameter_class=GroupParameter,
         )
+        """Parameter coefficient"""
 
-        self.add_parameter("curve_name", parameter_class=GroupParameter)
+        self.curve_name: GroupParameter = self.add_parameter(
+            "curve_name", parameter_class=GroupParameter
+        )
+        """Parameter curve_name"""
 
         Group(
             [
@@ -181,7 +271,7 @@ class LakeshoreModel325Curve(InstrumentChannel):
         return sensor_unit
 
     def set_data(
-        self, data_dict: dict[Any, Any], sensor_unit: Optional[str] = None
+        self, data_dict: dict[Any, Any], sensor_unit: str | None = None
     ) -> None:
         """
         Set the curve data according to the values found the the dictionary.
@@ -191,6 +281,7 @@ class LakeshoreModel325Curve(InstrumentChannel):
                                 dictionary
             sensor_unit (str): If None, the data dict is validated and the
                                 units are extracted.
+
         """
         if sensor_unit is None:
             sensor_unit = self.validate_datadict(data_dict)
@@ -201,7 +292,6 @@ class LakeshoreModel325Curve(InstrumentChannel):
         for value_index, (temperature_value, sensor_value) in enumerate(
             zip(temperature_values, sensor_values)
         ):
-
             cmd_str = (
                 f"CRVPT {self._index}, {value_index + 1}, "
                 f"{sensor_value:3.3f}, {temperature_value:3.3f}"
@@ -218,32 +308,40 @@ class LakeshoreModel325Sensor(InstrumentChannel):
         parent (LakeshoreModel325): The instrument this heater belongs to
         name (str)
         inp (str): Either "A" or "B"
+
     """
 
-    def __init__(self, parent: "LakeshoreModel325", name: str, inp: str) -> None:
-
+    def __init__(
+        self,
+        parent: "LakeshoreModel325",
+        name: str,
+        inp: str,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
+    ) -> None:
         if inp not in ["A", "B"]:
             raise ValueError("Please either specify input 'A' or 'B'")
 
         super().__init__(parent, name)
         self._input = inp
 
-        self.add_parameter(
+        self.temperature: Parameter = self.add_parameter(
             "temperature",
             get_cmd=f"KRDG? {self._input}",
             get_parser=float,
             label="Temperature",
             unit="K",
         )
+        """Parameter temperature"""
 
-        self.add_parameter(
+        self.status: Parameter = self.add_parameter(
             "status",
             get_cmd=f"RDGST? {self._input}",
             get_parser=lambda status: self.decode_sensor_status(int(status)),
             label="Sensor_Status",
         )
+        """Parameter status"""
 
-        self.add_parameter(
+        self.type: GroupParameter = self.add_parameter(
             "type",
             val_mapping={
                 "Silicon diode": 0,
@@ -259,10 +357,12 @@ class LakeshoreModel325Sensor(InstrumentChannel):
             },
             parameter_class=GroupParameter,
         )
+        """Parameter type"""
 
-        self.add_parameter(
+        self.compensation: GroupParameter = self.add_parameter(
             "compensation", vals=Enum(0, 1), parameter_class=GroupParameter
         )
+        """Parameter compensation"""
 
         Group(
             [self.type, self.compensation],
@@ -270,13 +370,14 @@ class LakeshoreModel325Sensor(InstrumentChannel):
             get_cmd=f"INTYPE? {self._input}",
         )
 
-        self.add_parameter(
+        self.curve_index: Parameter = self.add_parameter(
             "curve_index",
             set_cmd=f"INCRV {self._input}, {{}}",
             get_cmd=f"INCRV? {self._input}",
             get_parser=int,
             vals=Numbers(min_value=1, max_value=35),
         )
+        """Parameter curve_index"""
 
     @staticmethod
     def decode_sensor_status(sum_of_codes: int) -> str:
@@ -297,24 +398,31 @@ class LakeshoreModel325Sensor(InstrumentChannel):
 
 
 class LakeshoreModel325Heater(InstrumentChannel):
-    """
-    InstrumentChannel for heater control on a Lakeshore Model 325.
+    def __init__(
+        self,
+        parent: "LakeshoreModel325",
+        name: str,
+        loop: int,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
+    ) -> None:
+        """
+        InstrumentChannel for heater control on a Lakeshore Model 325.
 
-    Args:
-        parent (LakeshoreModel325): The instrument this heater belongs to
-        name (str)
-        loop (int): Either 1 or 2
-    """
+        Args:
+            parent: The instrument this heater belongs to
+            name: Name of the Channel
+            loop: Either 1 or 2
+            **kwargs: Forwarded to baseclass.
 
-    def __init__(self, parent: "LakeshoreModel325", name: str, loop: int) -> None:
+        """
 
         if loop not in [1, 2]:
             raise ValueError("Please either specify loop 1 or 2")
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, **kwargs)
         self._loop = loop
 
-        self.add_parameter(
+        self.control_mode: Parameter = self.add_parameter(
             "control_mode",
             get_cmd=f"CMODE? {self._loop}",
             set_cmd=f"CMODE {self._loop},{{}}",
@@ -327,24 +435,28 @@ class LakeshoreModel325Heater(InstrumentChannel):
                 "AutoTune P": "6",
             },
         )
+        """Parameter control_mode"""
 
-        self.add_parameter(
+        self.input_channel: GroupParameter = self.add_parameter(
             "input_channel", vals=Enum("A", "B"), parameter_class=GroupParameter
         )
+        """Parameter input_channel"""
 
-        self.add_parameter(
+        self.unit: GroupParameter = self.add_parameter(
             "unit",
             val_mapping={"Kelvin": "1", "Celsius": "2", "Sensor Units": "3"},
             parameter_class=GroupParameter,
         )
+        """Parameter unit"""
 
-        self.add_parameter(
+        self.powerup_enable: GroupParameter = self.add_parameter(
             "powerup_enable",
             val_mapping={True: 1, False: 0},
             parameter_class=GroupParameter,
         )
+        """Parameter powerup_enable"""
 
-        self.add_parameter(
+        self.output_metric: GroupParameter = self.add_parameter(
             "output_metric",
             val_mapping={
                 "current": "1",
@@ -352,6 +464,7 @@ class LakeshoreModel325Heater(InstrumentChannel):
             },
             parameter_class=GroupParameter,
         )
+        """Parameter output_metric"""
 
         Group(
             [self.input_channel, self.unit, self.powerup_enable, self.output_metric],
@@ -360,17 +473,20 @@ class LakeshoreModel325Heater(InstrumentChannel):
             get_cmd=f"CSET? {self._loop}",
         )
 
-        self.add_parameter(
+        self.P: GroupParameter = self.add_parameter(
             "P", vals=Numbers(0, 1000), get_parser=float, parameter_class=GroupParameter
         )
+        """Parameter P"""
 
-        self.add_parameter(
+        self.I: GroupParameter = self.add_parameter(
             "I", vals=Numbers(0, 1000), get_parser=float, parameter_class=GroupParameter
         )
+        """Parameter I"""
 
-        self.add_parameter(
+        self.D: GroupParameter = self.add_parameter(
             "D", vals=Numbers(0, 1000), get_parser=float, parameter_class=GroupParameter
         )
+        """Parameter D"""
 
         Group(
             [self.P, self.I, self.D],
@@ -383,27 +499,30 @@ class LakeshoreModel325Heater(InstrumentChannel):
         else:
             valid_output_ranges = Enum(0, 1)
 
-        self.add_parameter(
+        self.output_range: Parameter = self.add_parameter(
             "output_range",
             vals=valid_output_ranges,
             set_cmd=f"RANGE {self._loop}, {{}}",
             get_cmd=f"RANGE? {self._loop}",
             val_mapping={"Off": "0", "Low (2.5W)": "1", "High (25W)": "2"},
         )
+        """Parameter output_range"""
 
-        self.add_parameter(
+        self.setpoint: Parameter = self.add_parameter(
             "setpoint",
             vals=Numbers(0, 400),
             get_parser=float,
             set_cmd=f"SETP {self._loop}, {{}}",
             get_cmd=f"SETP? {self._loop}",
         )
+        """Parameter setpoint"""
 
-        self.add_parameter(
+        self.ramp_state: GroupParameter = self.add_parameter(
             "ramp_state", vals=Enum(0, 1), parameter_class=GroupParameter
         )
+        """Parameter ramp_state"""
 
-        self.add_parameter(
+        self.ramp_rate: GroupParameter = self.add_parameter(
             "ramp_rate",
             vals=Numbers(0, 100 / 60 * 1e3),
             unit="mK/s",
@@ -411,6 +530,7 @@ class LakeshoreModel325Heater(InstrumentChannel):
             get_parser=lambda v: float(v) / 60 * 1e3,  # We get values in K/min,
             set_parser=lambda v: v * 60 * 1e-3,  # Convert to K/min
         )
+        """Parameter ramp_rate"""
 
         Group(
             [self.ramp_state, self.ramp_rate],
@@ -418,9 +538,12 @@ class LakeshoreModel325Heater(InstrumentChannel):
             get_cmd=f"RAMP? {self._loop}",
         )
 
-        self.add_parameter("is_ramping", get_cmd=f"RAMPST? {self._loop}")
+        self.is_ramping: Parameter = self.add_parameter(
+            "is_ramping", get_cmd=f"RAMPST? {self._loop}"
+        )
+        """Parameter is_ramping"""
 
-        self.add_parameter(
+        self.resistance: Parameter = self.add_parameter(
             "resistance",
             get_cmd=f"HTRRES? {self._loop}",
             set_cmd=f"HTRRES {self._loop}, {{}}",
@@ -431,14 +554,16 @@ class LakeshoreModel325Heater(InstrumentChannel):
             label="Resistance",
             unit="Ohm",
         )
+        """Parameter resistance"""
 
-        self.add_parameter(
+        self.heater_output: Parameter = self.add_parameter(
             "heater_output",
             get_cmd=f"HTR? {self._loop}",
             get_parser=float,
             label="Heater Output",
             unit="%",
         )
+        """Parameter heater_output"""
 
 
 class LakeshoreModel325(VisaInstrument):
@@ -446,8 +571,12 @@ class LakeshoreModel325(VisaInstrument):
     QCoDeS driver for Lakeshore Model 325 Temperature Controller.
     """
 
-    def __init__(self, name: str, address: str, **kwargs: Any) -> None:
-        super().__init__(name, address, terminator="\r\n", **kwargs)
+    default_terminator = "\r\n"
+
+    def __init__(
+        self, name: str, address: str, **kwargs: "Unpack[VisaInstrumentKWArgs]"
+    ) -> None:
+        super().__init__(name, address, **kwargs)
 
         sensors = ChannelList(
             self, "sensor", LakeshoreModel325Sensor, snapshotable=False
@@ -489,10 +618,11 @@ class LakeshoreModel325(VisaInstrument):
 
         Args:
              index: The index to upload the curve to. We can only use
-                            indices reserved for user defined curves, 21-35
-             name
-             serial_number
+                indices reserved for user defined curves, 21-35
+             name: Name of the curve
+             serial_number: Serial number of the curve
              data_dict: A dictionary containing the curve data
+
         """
         if index not in range(21, 36):
             raise ValueError("index value should be between 21 and 35")

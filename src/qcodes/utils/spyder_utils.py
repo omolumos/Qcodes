@@ -17,7 +17,6 @@ def add_to_spyder_UMR_excludelist(modulename: str) -> None:
     TODO is there a better way to detect if we are in spyder?
     """
     if any("SPYDER" in name for name in os.environ):
-
         sitecustomize_found = False
         try:
             from spyder.utils.site import (  # pyright: ignore[reportMissingImports]
@@ -31,7 +30,7 @@ def add_to_spyder_UMR_excludelist(modulename: str) -> None:
             try:
                 from spyder_kernels.customize import spydercustomize  # pyright: ignore
 
-                sitecustomize = spydercustomize  # noqa F811
+                sitecustomize = spydercustomize
             except ImportError:
                 pass
             else:

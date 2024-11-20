@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 from hypothesis import HealthCheck, assume, example, given, settings
@@ -6,7 +8,6 @@ from matplotlib.collections import QuadMesh
 from pytest import FixtureRequest
 
 import qcodes as qc
-from qcodes.dataset.data_export import DSPlotData
 from qcodes.dataset.descriptions.detect_shapes import detect_shape_of_measurement
 from qcodes.dataset.measurements import Measurement
 from qcodes.dataset.plotting import (
@@ -18,6 +19,9 @@ from qcodes.dataset.plotting import (
 )
 from qcodes.instrument_drivers.mock_instruments import DummyInstrument
 from qcodes.plotting.axis_labels import _ENGINEERING_PREFIXES, _UNITS_FOR_RESCALING
+
+if TYPE_CHECKING:
+    from qcodes.dataset.data_export import DSPlotData
 
 
 class TerminateLoopException(Exception):
@@ -60,14 +64,21 @@ def test_rescaled_ticks_and_units(
         data_array = data_strategy
     else:
         # Generate actual data
-        scale_upper_bound = 999.9999 * 10 ** scale
-        scale_lower_bound = 10 ** scale
-        data_array = np.array(data_strategy.draw(
-                    lists(elements=one_of(
-                        floats(max_value=scale_upper_bound,
-                               min_value=-scale_upper_bound),
-                        just(np.nan)
-                    ), min_size=1)))
+        scale_upper_bound = 999.9999 * 10**scale
+        scale_lower_bound = 10**scale
+        data_array = np.array(
+            data_strategy.draw(
+                lists(
+                    elements=one_of(
+                        floats(
+                            max_value=scale_upper_bound, min_value=-scale_upper_bound
+                        ),
+                        just(np.nan),
+                    ),
+                    min_size=1,
+                )
+            )
+        )
 
         data_array_not_nans = data_array[np.logical_not(np.isnan(data_array))]
 
@@ -99,23 +110,23 @@ def test_rescaled_ticks_and_units(
     else:
         base_label = param_label
     postfix = expected_prefix + unit
-    if postfix != '':
+    if postfix != "":
         assert f"{base_label} ({postfix})" == label
     else:
         assert f"{base_label}" == label
 
-    if unit != '':
-        assert '5' == ticks_formatter(5 / (10 ** (-scale)))
-        assert '1' == ticks_formatter(1 / (10 ** (-scale)))
+    if unit != "":
+        assert "5" == ticks_formatter(5 / (10 ** (-scale)))
+        assert "1" == ticks_formatter(1 / (10 ** (-scale)))
         # also test the fact that "{:g}" is used in ticks formatter function
-        assert '2.12346' == ticks_formatter(2.123456789 / (10 ** (-scale)))
+        assert "2.12346" == ticks_formatter(2.123456789 / (10 ** (-scale)))
 
 
 def test_plot_by_id_line_and_heatmap(experiment, request: FixtureRequest) -> None:
     """
     Test that line plots and heatmaps can be plotted together
     """
-    inst = DummyInstrument('dummy', gates=['s1', 'm1', 's2', 'm2'])
+    inst = DummyInstrument("dummy", gates=["s1", "m1", "s2", "m2"])
     request.addfinalizer(inst.close)
 
     inst.m1.get = np.random.randn
@@ -137,7 +148,7 @@ def test_plot_by_id_line_and_heatmap(experiment, request: FixtureRequest) -> Non
 
     dataid = datasaver.run_id
     plot_by_id(dataid)
-    plot_by_id(dataid, cmap='bone')
+    plot_by_id(dataid, cmap="bone")
 
 
 @pytest.mark.parametrize("nan_setpoints", [True, False])
@@ -218,37 +229,35 @@ def test_plot_dataset_2d_shaped(
 
 
 def test_appropriate_kwargs() -> None:
-
-    kwargs = {'cmap': 'bone'}
+    kwargs = {"cmap": "bone"}
     check = kwargs.copy()
 
-    with _appropriate_kwargs('1D_line', False, **kwargs) as ap_kwargs:
+    with _appropriate_kwargs("1D_line", False, **kwargs) as ap_kwargs:
         assert ap_kwargs == {}
 
     assert kwargs == check
 
-    with _appropriate_kwargs('1D_point', False, **kwargs) as ap_kwargs:
+    with _appropriate_kwargs("1D_point", False, **kwargs) as ap_kwargs:
         assert ap_kwargs == {}
 
     assert kwargs == check
 
-    with _appropriate_kwargs('1D_bar', False, **kwargs) as ap_kwargs:
+    with _appropriate_kwargs("1D_bar", False, **kwargs) as ap_kwargs:
         assert ap_kwargs == {}
 
     assert kwargs == check
 
-    with _appropriate_kwargs('2D_grid', False, **kwargs) as ap_kwargs:
+    with _appropriate_kwargs("2D_grid", False, **kwargs) as ap_kwargs:
         assert ap_kwargs == kwargs
 
     assert kwargs == check
 
-    with _appropriate_kwargs('2D_point', False, **{}) as ap_kwargs:
+    with _appropriate_kwargs("2D_point", False, **{}) as ap_kwargs:
         assert len(ap_kwargs) == 1
-        assert ap_kwargs['cmap'] == qc.config.plotting.default_color_map
+        assert ap_kwargs["cmap"] == qc.config.plotting.default_color_map
 
 
 def test__complex_to_real_preparser_complex_toplevel_param() -> None:
-
     data_in: list[list[DSPlotData]] = [
         [
             {
@@ -268,7 +277,7 @@ def test__complex_to_real_preparser_complex_toplevel_param() -> None:
         ]
     ]
 
-    data_out = _complex_to_real_preparser(data_in, conversion='real_and_imag')
+    data_out = _complex_to_real_preparser(data_in, conversion="real_and_imag")
 
     assert np.shape(np.array(data_out)) == (2, 2)
     assert data_out[0][0] == data_in[0][0]
@@ -280,12 +289,12 @@ def test__complex_to_real_preparser_complex_toplevel_param() -> None:
     assert real_param["unit"] == "Ohm"
 
     imag_param = data_out[1][1]
-    assert imag_param['name'] == 'signal_imag'
-    assert imag_param['label'] == 'complex signal [imag]'
-    assert all(imag_param['data'] == np.array([0, 2, 1]))
-    assert imag_param['unit'] == 'Ohm'
+    assert imag_param["name"] == "signal_imag"
+    assert imag_param["label"] == "complex signal [imag]"
+    assert all(imag_param["data"] == np.array([0, 2, 1]))
+    assert imag_param["unit"] == "Ohm"
 
-    data_out = _complex_to_real_preparser(data_in, conversion='mag_and_phase')
+    data_out = _complex_to_real_preparser(data_in, conversion="mag_and_phase")
 
     assert len(data_out) == 2
     assert len(data_out[0]) == 2
@@ -298,13 +307,14 @@ def test__complex_to_real_preparser_complex_toplevel_param() -> None:
     assert phase_param["unit"] == "rad"
 
     mag_param = data_out[0][1]
-    assert mag_param['name'] == 'signal_mag'
-    assert mag_param['label'] == 'complex signal [mag]'
-    assert all(mag_param['data'] == np.array([0, np.sqrt(5), np.sqrt(2)]))
-    assert mag_param['unit'] == 'Ohm'
+    assert mag_param["name"] == "signal_mag"
+    assert mag_param["label"] == "complex signal [mag]"
+    assert all(mag_param["data"] == np.array([0, np.sqrt(5), np.sqrt(2)]))
+    assert mag_param["unit"] == "Ohm"
 
-    data_out = _complex_to_real_preparser(data_in, conversion='mag_and_phase',
-                                          degrees=True)
+    data_out = _complex_to_real_preparser(
+        data_in, conversion="mag_and_phase", degrees=True
+    )
 
     phase_param = data_out[1][1]
     assert phase_param["name"] == "signal_phase"
@@ -316,7 +326,6 @@ def test__complex_to_real_preparser_complex_toplevel_param() -> None:
 
 
 def test__complex_to_real_preparser_complex_setpoint() -> None:
-
     data_in: list[list[DSPlotData]] = [
         [
             {
@@ -336,7 +345,7 @@ def test__complex_to_real_preparser_complex_setpoint() -> None:
         ]
     ]
 
-    data_out = _complex_to_real_preparser(data_in, conversion='real_and_imag')
+    data_out = _complex_to_real_preparser(data_in, conversion="real_and_imag")
 
     assert np.shape(np.array(data_out)) == (1, 3)
     assert data_out[0][-1] == data_in[0][-1]
@@ -348,13 +357,13 @@ def test__complex_to_real_preparser_complex_setpoint() -> None:
     assert real_param["unit"] == "Ohm"
 
     imag_param = data_out[0][1]
-    assert imag_param['name'] == 'signal_imag'
-    assert imag_param['label'] == 'complex signal [imag]'
-    assert all(imag_param['data'] == np.array([0, 2, 1]))
-    assert imag_param['unit'] == 'Ohm'
+    assert imag_param["name"] == "signal_imag"
+    assert imag_param["label"] == "complex signal [imag]"
+    assert all(imag_param["data"] == np.array([0, 2, 1]))
+    assert imag_param["unit"] == "Ohm"
 
     measured_param = data_out[0][2]
-    assert measured_param['name'] == 'voltage'
-    assert measured_param['label'] == 'measured voltage'
-    assert measured_param['unit'] == 'V'
-    assert all(measured_param['data'] == np.array([0, 1, 2]))
+    assert measured_param["name"] == "voltage"
+    assert measured_param["label"] == "measured voltage"
+    assert measured_param["unit"] == "V"
+    assert all(measured_param["data"] == np.array([0, 1, 2]))

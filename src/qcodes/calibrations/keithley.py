@@ -3,15 +3,20 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from qcodes.instrument import Instrument
-from qcodes.parameters import Parameter
-
 if TYPE_CHECKING:
+    from qcodes.instrument import Instrument
     from qcodes.instrument_drivers.Keithley import Keithley26xx
+    from qcodes.parameters import Parameter
 
 src_FS_map = {
-    "200e-3": 180e-3, "2": 1.8, "20": 18, "200": 180,
-    "100e-3": 80e-3, "1": 0.8, "6": 5.6, "40": 38,
+    "200e-3": 180e-3,
+    "2": 1.8,
+    "20": 18,
+    "200": 180,
+    "100e-3": 80e-3,
+    "1": 0.8,
+    "6": 5.6,
+    "40": 38,
 }
 
 
@@ -43,7 +48,9 @@ def calibrate_keithley_smu_v(
             "20": 100,
         }
     else:
-        wrong_smu_range_keys = set(dmm_range_per_smu_range_mapping.keys()) - set(src_FS_map.keys())
+        wrong_smu_range_keys = set(dmm_range_per_smu_range_mapping.keys()) - set(
+            src_FS_map.keys()
+        )
         if len(wrong_smu_range_keys) > 0:
             raise ValueError(
                 f"dmm_range_per_smu_range_mapping contains unknown keys {wrong_smu_range_keys}, "
@@ -53,7 +60,9 @@ def calibrate_keithley_smu_v(
     setup_dmm(dmm)
 
     for smu_channel in smu.channels:
-        input(f"Please connect channel {smu_channel.channel} to V input on calibrated DMM.")
+        input(
+            f"Please connect channel {smu_channel.channel} to V input on calibrated DMM."
+        )
         for smu_range, dmm_range in dmm_range_per_smu_range_mapping.items():
             dmm.range(dmm_range)
             calibrate_keithley_smu_v_single(

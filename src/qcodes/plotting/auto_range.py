@@ -1,7 +1,6 @@
 """
 This file holds auto ranging logic that is independent of plotting backend
 """
-from typing import Union
 
 import numpy as np
 
@@ -11,7 +10,7 @@ DEFAULT_PERCENTILE = (50, 50)
 
 def auto_range_iqr(
     data_array: np.ndarray,
-    cutoff_percentile: Union[tuple[float, float], float] = DEFAULT_PERCENTILE,
+    cutoff_percentile: tuple[float, float] | float = DEFAULT_PERCENTILE,
 ) -> tuple[float, float]:
     """
     Get the min and max range of the provided array that excludes outliers
@@ -30,6 +29,7 @@ def auto_range_iqr(
 
     Returns:
         region limits [vmin, vmax]
+
     """
     if isinstance(cutoff_percentile, tuple):
         t = cutoff_percentile[0]

@@ -4,17 +4,19 @@ import time
 from collections.abc import Generator, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
 
 from qcodes.dataset.dond.do_nd import _Sweeper
 from qcodes.dataset.dond.do_nd_utils import ParamMeasT, catch_interrupts
 from qcodes.dataset.dond.sweeps import AbstractSweep, LinSweep, TogetherSweep
-from qcodes.dataset.experiment_container import Experiment
 from qcodes.dataset.measurements import DataSaver, Measurement
 from qcodes.dataset.threading import process_params_meas
 from qcodes.parameters.parameter_base import ParameterBase
+
+if TYPE_CHECKING:
+    from qcodes.dataset.experiment_container import Experiment
 
 TRACER = trace.get_tracer(__name__)
 
@@ -46,10 +48,11 @@ def setup_measurement_instances(
     Args:
         dataset_definitions: A set of DataSetDefinitions to create and register
             parameters for
-        experiment: The Experiment all Measurement objects will be part of
+        override_experiment: The Experiment all Measurement objects will be part of
 
     Returns:
         A list of Measurement objects
+
     """
     measurements: list[Measurement] = []
     for ds_def in dataset_definitions:
@@ -88,14 +91,17 @@ def datasaver_builder(
 
     Yields:
         A list of generated datasavers with parameters registered
+
     """
 
     measurement_instances = setup_measurement_instances(
         dataset_definitions, override_experiment
     )
-    with TRACER.start_as_current_span(
-        "qcodes.dataset.datasaver_builder"
-    ), catch_interrupts() as _, ExitStack() as stack:
+    with (
+        TRACER.start_as_current_span("qcodes.dataset.datasaver_builder"),
+        catch_interrupts() as _,
+        ExitStack() as stack,
+    ):
         datasaver_builder_span = trace.get_current_span()
         datasavers = [
             stack.enter_context(measurement.run(parent_span=datasaver_builder_span))
@@ -117,6 +123,7 @@ def parse_dond_into_args(
             callables
 
     Returns:
+        A tuple of the list of sweeps to perform and a list of the parameters to measure.
 
     """
     sweep_instances: list[AbstractSweep] = []
@@ -160,6 +167,7 @@ def dond_into(
 
         additional_setpoints: A list of setpoint parameters to be registered in the
             measurement but not scanned/swept-over.
+
     """
     # at this stage multiple measurement context managers may be in run state
     # as datasavers. Here we ensure we bind the parent span to the correct

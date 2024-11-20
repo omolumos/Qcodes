@@ -1,11 +1,14 @@
 import itertools
 import textwrap
 import warnings
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING
 
 import qcodes.validators as vals
-from qcodes.instrument import VisaInstrument
-from qcodes.parameters import create_on_off_val_mapping
+from qcodes.instrument import VisaInstrument, VisaInstrumentKWArgs
+from qcodes.parameters import Parameter, create_on_off_val_mapping
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class Keithley3706AUnknownOrEmptySlot(Exception):
@@ -22,17 +25,24 @@ class Keithley3706A(VisaInstrument):
     System Switch.
     """
 
+    default_terminator = "\n"
+
     def __init__(
-        self, name: str, address: str, terminator: str = "\n", **kwargs: Any
+        self,
+        name: str,
+        address: str,
+        **kwargs: "Unpack[VisaInstrumentKWArgs]",
     ) -> None:
         """
         Args:
             name: Name to use internally in QCoDeS
             address: VISA resource address
-        """
-        super().__init__(name, address, terminator=terminator, **kwargs)
+            **kwargs: kwargs are forwarded to base class.
 
-        self.add_parameter(
+        """
+        super().__init__(name, address, **kwargs)
+
+        self.channel_connect_rule: Parameter = self.add_parameter(
             "channel_connect_rule",
             get_cmd=self._get_channel_connect_rule,
             set_cmd=self._set_channel_connect_rule,
@@ -56,16 +66,30 @@ class Keithley3706A(VisaInstrument):
             ),
             vals=vals.Enum("BREAK_BEFORE_MAKE", "MAKE_BEFORE_BREAK", "OFF"),
         )
+        """
+        Controls the connection rule for closing and opening channels when using
+        `exclusive_close` and `exclusive_slot_close`
+        parameters.
 
-        self.add_parameter(
+        If it is set to break before make, it is ensured that all channels open
+        before any channels close.
+
+        If it is set to make before break, it is ensured that all channels close
+        before any channels open.
+
+        If it is off, channels open and close simultaneously.
+        """
+
+        self.gpib_enabled: Parameter = self.add_parameter(
             "gpib_enabled",
             get_cmd=self._get_gpib_status,
             set_cmd=self._set_gpib_status,
             docstring="Enables or disables GPIB connection.",
             val_mapping=create_on_off_val_mapping(on_val="true", off_val="false"),
         )
+        """Enables or disables GPIB connection."""
 
-        self.add_parameter(
+        self.gpib_address: Parameter = self.add_parameter(
             "gpib_address",
             get_cmd=self._get_gpib_address,
             get_parser=int,
@@ -73,14 +97,16 @@ class Keithley3706A(VisaInstrument):
             docstring="Sets and gets the GPIB address.",
             vals=vals.Ints(1, 30),
         )
+        """Sets and gets the GPIB address."""
 
-        self.add_parameter(
+        self.lan_enabled: Parameter = self.add_parameter(
             "lan_enabled",
             get_cmd=self._get_lan_status,
             set_cmd=self._set_lan_status,
             docstring="Enables or disables LAN connection.",
             val_mapping=create_on_off_val_mapping(on_val="true", off_val="false"),
         )
+        """Enables or disables LAN connection."""
 
         self.connect_message()
 
@@ -91,6 +117,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays, slots or channel patterns to be queried.
+
         """
         if not self._validator(val):
             raise Keithley3706AInvalidValue(
@@ -107,6 +134,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays, slots or channel patterns to be queried.
+
         """
 
         if not self._validator(val):
@@ -124,6 +152,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays to be queried.
+
         """
         slots = ["allslots", *self._get_slot_names()]
         forbidden_channels = self.get_forbidden_channels("allslots")
@@ -156,6 +185,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays.
+
         """
         states = self.get_interlock_state()
         val_specifiers = val.split(",")
@@ -193,6 +223,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays to be queried.
+
         """
         slots = ["allslots", *self._get_slot_names()]
         if val in slots:
@@ -219,6 +250,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels, channel ranges,
                 backplane relays to be queried.
+
         """
         slots = ["allslots", *self._get_slot_names()]
         if val in slots:
@@ -244,13 +276,13 @@ class Keithley3706A(VisaInstrument):
     def _get_gpib_status(self) -> str:
         return self.ask("comm.gpib.enable")
 
-    def _set_gpib_status(self, val: Union[str, bool]) -> None:
+    def _set_gpib_status(self, val: str | bool) -> None:
         self.write(f"comm.gpib.enable = {val}")
 
     def _get_lan_status(self) -> str:
         return self.ask("comm.lan.enable")
 
-    def _set_lan_status(self, val: Union[str, bool]) -> None:
+    def _set_lan_status(self, val: str | bool) -> None:
         self.write(f"comm.lan.enable = {val}")
 
     def _get_gpib_address(self) -> int:
@@ -259,13 +291,14 @@ class Keithley3706A(VisaInstrument):
     def _set_gpib_address(self, val: int) -> None:
         self.write(f"gpib.address = {val}")
 
-    def get_closed_channels(self, val: str) -> Optional[list[str]]:
+    def get_closed_channels(self, val: str) -> list[str] | None:
         """
         Queries for the closed channels.
 
         Args:
             val: A string representing the channels,
                 backplane relays or channel patterns to be queried.
+
         """
         if val == "":
             raise Keithley3706AInvalidValue("Argument cannot be an empty string.")
@@ -288,6 +321,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing channels and backplane relays
                 to make forbidden to close.
+
         """
         if not self._validator(val):
             raise Keithley3706AInvalidValue(
@@ -306,6 +340,7 @@ class Keithley3706A(VisaInstrument):
             val: A string representing the channels,
                 backplane relays or channel patterns to be queried to see
                 if they are forbidden to close.
+
         """
         if not self._validator(val):
             raise Keithley3706AInvalidValue(
@@ -322,6 +357,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels that will no longer
                 be listed as forbidden to close.
+
         """
         if not self._validator(val):
             raise Keithley3706AInvalidValue(
@@ -339,6 +375,7 @@ class Keithley3706A(VisaInstrument):
             val: A string representing the channels for which there will
                 be an additional delay time.
             delay_time: Delay time for the specified channels in seconds.
+
         """
         backplanes = self.get_analog_backplane_specifiers()
         specifiers = val.split(",")
@@ -363,6 +400,7 @@ class Keithley3706A(VisaInstrument):
         Args:
             val: A string representing the channels to query for
                 additional delay times.
+
         """
         backplanes = self.get_analog_backplane_specifiers()
         specifiers = val.split(",")
@@ -392,6 +430,7 @@ class Keithley3706A(VisaInstrument):
             val: A string representing the list of channels to change.
             backplane: A string representing the list of analog backplane
                 relays to set for the channels specified.
+
         """
         states = self.get_interlock_state()
         backplanes = self.get_analog_backplane_specifiers()
@@ -436,6 +475,7 @@ class Keithley3706A(VisaInstrument):
 
         Args:
             val: A string representing the channels being queried.
+
         """
         backplanes = self.get_analog_backplane_specifiers()
         specifiers = val.split(",")
@@ -552,6 +592,7 @@ class Keithley3706A(VisaInstrument):
 
         Args:
             slot_no: An integer value specifying the slot number.
+
         """
         slot_id = self._get_slot_ids()
         if str(slot_no) not in slot_id:
@@ -668,6 +709,7 @@ class Keithley3706A(VisaInstrument):
                 will be connected.
             columns: The specifiers of the columns will be connected to the
                 provided row.
+
         """
         return self._connect_or_disconnect_row_to_columns(
             "connect", slot_id, row_id, columns
@@ -687,6 +729,7 @@ class Keithley3706A(VisaInstrument):
                 will be disconnected.
             columns: The specifiers of the columns will be disconnected from the
                 provided row.
+
         """
         return self._connect_or_disconnect_row_to_columns(
             "disconnect", slot_id, row_id, columns
@@ -706,6 +749,7 @@ class Keithley3706A(VisaInstrument):
                 will be connected.
             rows: The specifiers of the rows will be connected to the
                 provided column.
+
         """
         return self._connect_or_disconnect_column_to_rows(
             "connect", slot_id, column_id, rows
@@ -725,12 +769,13 @@ class Keithley3706A(VisaInstrument):
                 will be disconnected.
             rows: The specifiers of the rows will be disconnected from the
                 provided column.
+
         """
         return self._connect_or_disconnect_column_to_rows(
             "disconnect", slot_id, column_id, rows
         )
 
-    def get_idn(self) -> dict[str, Optional[str]]:
+    def get_idn(self) -> dict[str, str | None]:
         """
         Overwrites the generic QCoDeS get IDN method. Returns
         a dictionary including the vendor, model, serial number and
@@ -740,7 +785,7 @@ class Keithley3706A(VisaInstrument):
         vendor, model, serial, firmware = map(str.strip, idnstr.split(","))
         model = model[6:]
 
-        idn: dict[str, Optional[str]] = {
+        idn: dict[str, str | None] = {
             "vendor": vendor,
             "model": model,
             "serial": serial,
@@ -769,7 +814,7 @@ class Keithley3706A(VisaInstrument):
                 switch_cards.append(sdict)
         return tuple(switch_cards)
 
-    def get_available_memory(self) -> dict[str, Optional[str]]:
+    def get_available_memory(self) -> dict[str, str | None]:
         """
         Returns the amount of memory that is currently available for
         storing scripts, configurations and channel patterns.
@@ -779,7 +824,7 @@ class Keithley3706A(VisaInstrument):
             str.strip, memstring.split(",")
         )
 
-        memory_available: dict[str, Optional[str]] = {
+        memory_available: dict[str, str | None] = {
             "System Memory  (%)": system_memory,
             "Script Memory  (%)": script_memory,
             "Pattern Memory (%)": pattern_memory,
@@ -812,7 +857,7 @@ class Keithley3706A(VisaInstrument):
             states.append({"slot_no": i, "state": interlock_status[state]})
         return tuple(states)
 
-    def get_interlock_state_by_slot(self, slot: Union[str, int]) -> Union[int, None]:
+    def get_interlock_state_by_slot(self, slot: str | int) -> int | None:
         state = self.ask(f"slot[{int(slot)}].interlock.state")
         if state == "nil":
             return None
@@ -831,7 +876,7 @@ class Keithley3706A(VisaInstrument):
         """
         self.write("lan.reset()")
 
-    def save_setup(self, val: Optional[str] = None) -> None:
+    def save_setup(self, val: str | None = None) -> None:
         """
         Saves the present setup.
 
@@ -840,13 +885,14 @@ class Keithley3706A(VisaInstrument):
                 to which the setup shall be saved on a USB flash drive. If not
                 provided, the setup will be saved to the nonvolatile memory
                 of the instrument, any previous saves will be overwritten.
+
         """
         if val is not None:
             self.write(f"setup.save('{val}')")
         else:
             self.write("setup.save()")
 
-    def load_setup(self, val: Union[int, str]) -> None:
+    def load_setup(self, val: int | str) -> None:
         """
         Loads the settings from a saved setup.
 
@@ -856,6 +902,7 @@ class Keithley3706A(VisaInstrument):
                 the saved setup from the nonvolatile memory is recalled.
                 Otherwise, a string specifying the relative path to the saved
                 setup on a USB drive should be passed in.
+
         """
         self.write(f"setup.recall('{val}')")
 
@@ -876,7 +923,7 @@ class Keithley3706A(VisaInstrument):
         return True
 
     def connect_message(
-        self, idn_param: str = "IDN", begin_time: Optional[float] = None
+        self, idn_param: str = "IDN", begin_time: float | None = None
     ) -> None:
         """
         Overwrites the generic QCoDeS instrument connect message.

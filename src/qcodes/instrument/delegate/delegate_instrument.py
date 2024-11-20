@@ -14,11 +14,12 @@ from qcodes.parameters import (
     Parameter,
 )
 
-from ..channel import InstrumentChannel
 from ..instrument_base import InstrumentBase
 
 if TYPE_CHECKING:
     from qcodes.station import Station
+
+    from ..channel import InstrumentChannel
 
 
 _log = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ class DelegateInstrument(InstrumentBase):
             ``.set()`` method on the endpoint parameters. Defaults to None.
         units: Optional units to set for parameters.
         metadata: Optional metadata to pass to instrument. Defaults to None.
+
     """
 
     param_cls = DelegateGroupParameter
@@ -145,7 +147,9 @@ class DelegateInstrument(InstrumentBase):
         Args:
             parent: Measurement station
             path: Relative path to parse
+
         """
+
         def _parse_path(parent: Any, elem: Sequence[str]) -> Any:
             child = getattr(parent, elem[0])
             if len(elem) == 1:
@@ -160,6 +164,7 @@ class DelegateInstrument(InstrumentBase):
         Args:
             dry_run: Dry run to test if defaults are set correctly.
                 Defaults to False.
+
         """
         _log.debug(f"Setting default values: {self._initial_values}")
         for path, value in self._initial_values.items():
@@ -175,8 +180,7 @@ class DelegateInstrument(InstrumentBase):
                         name = path.split(".")[-1]
                         parent_path = ".".join(path.split(".")[:-1])
                         parent = self.parse_instrument_path(
-                            parent=self,
-                            path=parent_path
+                            parent=self, path=parent_path
                         )
                     else:
                         parent, name = self, path
@@ -218,9 +222,7 @@ class DelegateInstrument(InstrumentBase):
         """Get the endpoint names"""
         parameter_names = [_e.name for _e in parameters]
         if len(parameter_names) != len(set(parameter_names)):
-            parameter_names = [
-                f"{_e}{n}" for n, _e in enumerate(parameter_names)
-            ]
+            parameter_names = [f"{_e}{n}" for n, _e in enumerate(parameter_names)]
         return parameter_names
 
     def _add_parameter(
@@ -252,7 +254,7 @@ class DelegateInstrument(InstrumentBase):
         getter: Callable[..., Any] | None = None,
         formatter: Callable[..., Any] | None = None,
         unit: str | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """Create delegate parameter that links to a given set of paths
         (e.g. my_instrument.my_param) on the station"""
@@ -263,9 +265,7 @@ class DelegateInstrument(InstrumentBase):
 
         setter_fn = None
         if setter is not None:
-            setter_method = self.parse_instrument_path(
-                station, setter.pop("method")
-            )
+            setter_method = self.parse_instrument_path(station, setter.pop("method"))
             setter_fn = partial(setter_method, **setter)
 
         params = [
@@ -279,7 +279,7 @@ class DelegateInstrument(InstrumentBase):
             parameter_names=parameter_names,
             setter=setter_fn,
             getter=getter,
-            formatter=formatter
+            formatter=formatter,
         )
 
         self.add_parameter(
@@ -287,7 +287,7 @@ class DelegateInstrument(InstrumentBase):
             parameter_class=GroupedParameter,
             group=group,
             unit=unit,
-            **kwargs
+            **kwargs,
         )
 
     def _create_and_add_channels(
@@ -299,12 +299,9 @@ class DelegateInstrument(InstrumentBase):
         channel_wrapper = None
         chnnls_dict: dict[str, str | Mapping[str, Any]] = dict(channels)
         channel_type_global = chnnls_dict.pop("type", None)
-        if channel_type_global is not None and \
-           not isinstance(channel_type_global, str):
+        if channel_type_global is not None and not isinstance(channel_type_global, str):
             raise ValueError("Wrong channel type.")
-        channel_wrapper_global = _get_channel_wrapper_class(
-            channel_type_global
-        )
+        channel_wrapper_global = _get_channel_wrapper_class(channel_type_global)
 
         for channel_name, input_params in chnnls_dict.items():
             if isinstance(input_params, Mapping):
@@ -344,15 +341,11 @@ class DelegateInstrument(InstrumentBase):
                 raise ValueError(msg) from v_err
 
         elif isinstance(input_params, Mapping) and channel_wrapper is not None:
-            channel = self.parse_instrument_path(
-                station, input_params["channel"]
-            )
+            channel = self.parse_instrument_path(station, input_params["channel"])
             wrapper_kwargs = dict(**kwargs, **input_params)
 
             channel = channel_wrapper(
-                parent=channel.parent,
-                name=channel_name,
-                **wrapper_kwargs
+                parent=channel.parent, name=channel_name, **wrapper_kwargs
             )
         else:
             raise ValueError(

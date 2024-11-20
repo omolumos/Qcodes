@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from qcodes.validators import Arrays, Validator
 
 from .parameter import Parameter
-from .parameter_base import ParamDataType, ParameterBase
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    from .parameter_base import ParamDataType, ParameterBase
 
 LOG = logging.getLogger(__name__)
 
@@ -39,7 +42,6 @@ class ParameterWithSetpoints(Parameter):
         snapshot_value: bool = False,
         **kwargs: Any,
     ) -> None:
-
         if not isinstance(vals, Arrays):
             raise ValueError(
                 f"A ParameterWithSetpoints must have an Arrays "
@@ -171,6 +173,7 @@ def expand_setpoints_helper(
     Returns:
         A list of tuples of parameters and values for the specified parameter
         and its setpoints.
+
     """
     if not isinstance(parameter, ParameterWithSetpoints):
         raise TypeError(

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sized
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from warnings import warn
 
 from qcodes.dataset.data_set import DataSet, load_by_id, new_data_set
-from qcodes.dataset.data_set_protocol import SPECS, DataSetProtocol
 from qcodes.dataset.experiment_settings import _set_default_experiment_id
 from qcodes.dataset.sqlite.connection import ConnectionPlus, path_to_dbfile
 from qcodes.dataset.sqlite.database import (
@@ -28,6 +27,9 @@ from qcodes.dataset.sqlite.queries import (
 )
 from qcodes.dataset.sqlite.queries import new_experiment as ne
 from qcodes.dataset.sqlite.query_helpers import VALUES, select_one_where
+
+if TYPE_CHECKING:
+    from qcodes.dataset.data_set_protocol import SPECS, DataSetProtocol
 
 log = logging.getLogger(__name__)
 
@@ -61,18 +63,18 @@ class Experiment(Sized):
               first tries to use path_to_db to figure out where to connect to.
               If path_to_db is not supplied either, a new connection
               to the DB file specified in the config is made
+
         """
 
         self.conn = conn_from_dbpath_or_conn(conn, path_to_db)
 
-        max_id = len(get_experiments(self.conn))
+        experiments_list = get_experiments(self.conn)
 
         if exp_id is not None:
-            if exp_id not in range(1, max_id+1):
-                raise ValueError('No such experiment in the database')
+            if exp_id not in experiments_list:
+                raise ValueError("No such experiment in the database")
             self._exp_id = exp_id
         else:
-
             # it is better to catch an invalid format string earlier than later
             try:
                 # the corresponding function from sqlite module will try to
@@ -80,11 +82,13 @@ class Experiment(Sized):
                 # for that here
                 format_string.format("name", 1, 1)
             except Exception as e:
-                raise ValueError("Invalid format string. Can not format "
-                                 "(name, exp_id, run_counter)") from e
+                raise ValueError(
+                    "Invalid format string. Can not format "
+                    "(name, exp_id, run_counter)"
+                ) from e
 
             log.info(f"creating new experiment in {self.path_to_db}")
-
+            max_id = max(experiments_list, default=0)
             name = name or f"experiment_{max_id+1}"
             sample_name = sample_name or "some_sample"
             self._exp_id = ne(self.conn, name, sample_name, format_string)
@@ -149,9 +153,9 @@ class Experiment(Sized):
                 with
             values: the values to associate with the parameters
             metadata: the metadata to associate with the dataset
+
         """
-        return new_data_set(name, self.exp_id, specs, values, metadata,
-                            conn=self.conn)
+        return new_data_set(name, self.exp_id, specs, values, metadata, conn=self.conn)
 
     def data_set(self, counter: int) -> DataSet:
         """
@@ -162,9 +166,9 @@ class Experiment(Sized):
 
         Returns:
             the dataset
+
         """
-        run_id = get_runid_from_expid_and_counter(self.conn, self.exp_id,
-                                                  counter)
+        run_id = get_runid_from_expid_and_counter(self.conn, self.exp_id, counter)
         return DataSet(run_id=run_id, conn=self.conn)
 
     def data_sets(self) -> list[DataSetProtocol]:
@@ -178,7 +182,7 @@ class Experiment(Sized):
         """Get the last dataset of this experiment"""
         run_id = get_last_run(self.conn, self.exp_id)
         if run_id is None:
-            raise ValueError('There are no runs in this experiment')
+            raise ValueError("There are no runs in this experiment")
         return load_by_id(run_id)
 
     def finish(self) -> None:
@@ -192,9 +196,7 @@ class Experiment(Sized):
         return len(self.data_sets())
 
     def __repr__(self) -> str:
-        out = [
-            f"{self.name}#{self.sample_name}#{self.exp_id}@{self.path_to_db}"
-        ]
+        out = [f"{self.name}#{self.sample_name}#{self.exp_id}@{self.path_to_db}"]
         out.append("-" * len(out[0]))
         out += [
             f"{d.run_id}-{d.name}-{d.counter}-{d._parameters}-{len(d)}"
@@ -204,6 +206,7 @@ class Experiment(Sized):
 
 
 # public api
+
 
 def experiments(conn: ConnectionPlus | None = None) -> list[Experiment]:
     """
@@ -215,6 +218,7 @@ def experiments(conn: ConnectionPlus | None = None) -> list[Experiment]:
 
     Returns:
         All the experiments in the container
+
     """
     conn = conn_from_dbpath_or_conn(conn=conn, path_to_db=None)
     log.info(f"loading experiments from {conn.path_to_dbfile}")
@@ -239,6 +243,7 @@ def new_experiment(
           to the DB file specified in the config is made
     Returns:
         the new experiment
+
     """
     sample_name = sample_name or "some_sample"
     conn = conn or connect(get_DB_location())
@@ -268,10 +273,11 @@ def load_experiment(exp_id: int, conn: ConnectionPlus | None = None) -> Experime
         experiment with the specified id
     Raises:
         ValueError: If experiment id is not an integer.
+
     """
     conn = conn_from_dbpath_or_conn(conn=conn, path_to_db=None)
     if not isinstance(exp_id, int):
-        raise ValueError('Experiment ID must be an integer')
+        raise ValueError("Experiment ID must be an integer")
     experiment = Experiment(exp_id=exp_id, conn=conn)
     _set_default_experiment_id(path_to_dbfile(conn), experiment.exp_id)
     return experiment
@@ -285,11 +291,12 @@ def load_last_experiment() -> Experiment:
         The last experiment
     Raises:
         ValueError: If no experiment exists in the db.
+
     """
     conn = connect(get_DB_location())
     last_exp_id = get_last_experiment(conn)
     if last_exp_id is None:
-        raise ValueError('There are no experiments in the database file')
+        raise ValueError("There are no experiments in the database file")
     experiment = Experiment(exp_id=last_exp_id)
     _set_default_experiment_id(get_DB_location(), experiment.exp_id)
     return experiment
@@ -324,6 +331,7 @@ def load_experiment_by_name(
         ValueError: either if the name and sample name are not unique, unless
             load_last_duplicate is True, or if no experiment found for the
             supplied name and sample.
+
     """
     conn = conn or connect(get_DB_location())
     if sample is not None:
@@ -379,6 +387,7 @@ def load_or_create_experiment(
     Raises:
         ValueError: If the name and sample name are not unique, unless
             load_last_duplicate is True.
+
     """
     conn = conn or connect(get_DB_location())
     try:
@@ -390,8 +399,7 @@ def load_or_create_experiment(
         )
     except ValueError as exception:
         if "Experiment not found" in str(exception):
-            experiment = new_experiment(experiment_name, sample_name,
-                                        conn=conn)
+            experiment = new_experiment(experiment_name, sample_name, conn=conn)
         else:
             raise exception
     return experiment

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .parameter import Parameter
-from .parameter_base import ParamDataType, ParamRawDataType
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from datetime import datetime
+
+    from .parameter_base import ParamDataType, ParamRawDataType
 
 
 class DelegateParameter(Parameter):
@@ -43,6 +46,7 @@ class DelegateParameter(Parameter):
         A DelegateParameter is not registered on the instrument by default.
         You should pass ``bind_to_instrument=True`` if you want this to
         be the case.
+
     """
 
     class _DelegateCache:
@@ -267,6 +271,7 @@ class DelegateParameter(Parameter):
             TypeError: If the value is of the wrong type.
             ValueError: If the value is outside the bounds specified by the
                validator.
+
         """
         super().validate(value)
         if self.source is not None:

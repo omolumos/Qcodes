@@ -3,16 +3,18 @@ from __future__ import annotations
 import collections
 import collections.abc
 import logging
-from collections.abc import Callable, Iterator, Sequence
 from copy import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from qcodes.metadatable import Metadatable
 from qcodes.utils import full_class
 
-from .parameter import Parameter
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Sequence
+
+    from .parameter import Parameter
 
 _LOG = logging.getLogger(__name__)
 
@@ -36,9 +38,11 @@ def combine(
         *parameters: The parameters to combine.
         name: The name of the paramter.
         label: The label of the combined parameter.
-        unit: the unit of the combined parameter.
-        aggregator: a function to aggregate
+        unit: The unit of the combined parameter.
+        units: Deprecated argument left for backwards compatibility. Do not use.
+        aggregator: A function to aggregate
             the set values into one.
+
     """
     my_parameters = list(parameters)
     multi_par = CombinedParameter(my_parameters, name, label, unit, units, aggregator)
@@ -56,7 +60,9 @@ class CombinedParameter(Metadatable):
         name: The name of the parameter
         label: The label of the combined parameter
         unit: The unit of the combined parameter
+        units: Deprecated argument left for backwards compatibility. Do not use.
         aggregator: A function to aggregate the set values into one
+
     """
 
     def __init__(
@@ -115,6 +121,7 @@ class CombinedParameter(Metadatable):
 
         Returns:
             list of values that where actually set
+
         """
         values = self.setpoints[index]
         for setFunction, value in zip(self.sets, values):
@@ -137,6 +144,7 @@ class CombinedParameter(Metadatable):
 
         Returns:
             combined parameter
+
         """
         # if it's a list of arrays, convert to one array
         if len(array) > 1:
@@ -144,11 +152,13 @@ class CombinedParameter(Metadatable):
             if len(dim) != 1:
                 raise ValueError("Arrays have different number of setpoints")
             nparray = np.array(array).transpose()
-        else:
+        elif len(array) == 1:
             # cast to array in case users
             # decide to not read docstring
             # and pass a 2d list
             nparray = np.array(array[0])
+        else:
+            raise ValueError("Need at least one array to sweep over.")
         new = copy(self)
         _error_msg = """ Dimensionality of array does not match\
                         the number of parameter combined. Expected a \
@@ -194,6 +204,7 @@ class CombinedParameter(Metadatable):
 
         Returns:
             dict: Base snapshot.
+
         """
         meta_data: dict[str, Any] = collections.OrderedDict()
         meta_data["__class__"] = full_class(self)

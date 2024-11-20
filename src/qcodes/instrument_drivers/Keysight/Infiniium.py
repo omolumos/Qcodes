@@ -1,6 +1,6 @@
 import re
-from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import numpy as np
 from pyvisa import VisaIOError
@@ -10,9 +10,11 @@ import qcodes.validators as vals
 from qcodes.instrument import (
     ChannelList,
     InstrumentBase,
+    InstrumentBaseKWArgs,
     InstrumentChannel,
     InstrumentModule,
     VisaInstrument,
+    VisaInstrumentKWArgs,
 )
 from qcodes.parameters import (
     Parameter,
@@ -20,6 +22,11 @@ from qcodes.parameters import (
     ParameterWithSetpoints,
     create_on_off_val_mapping,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from typing_extensions import Unpack
 
 
 class DSOTimeAxisParam(Parameter):
@@ -95,7 +102,7 @@ class DSOTraceParam(ParameterWithSetpoints):
     def __init__(
         self,
         name: str,
-        instrument: Union["KeysightInfiniiumChannel", "KeysightInfiniiumFunction"],
+        instrument: "KeysightInfiniiumChannel | KeysightInfiniiumFunction",
         channel: str,
         **kwargs: Any,
     ):
@@ -113,13 +120,13 @@ class DSOTraceParam(ParameterWithSetpoints):
         self._unit = 0
 
     @property
-    def setpoints(self) -> Sequence[ParameterBase]:
+    def setpoints(self) -> "Sequence[ParameterBase]":
         """
         Overwrite setpoint parameter to update setpoints if auto_digitize is true
         """
         instrument = self.instrument
         if isinstance(instrument, KeysightInfiniiumChannel):
-            root_instrument: "KeysightInfiniium"
+            root_instrument: KeysightInfiniium
             root_instrument = self.root_instrument  # type: ignore[assignment]
             cache_setpoints = root_instrument.cache_setpoints()
             if not cache_setpoints:
@@ -135,7 +142,7 @@ class DSOTraceParam(ParameterWithSetpoints):
         raise RuntimeError("Invalid type for parent instrument.")
 
     @setpoints.setter
-    def setpoints(self, val: Any) -> None:
+    def setpoints(self, setpoints: Any) -> None:
         """
         Stub to allow initialization. Ignore any set attempts on setpoint as we
         figure it out on the fly.
@@ -157,18 +164,18 @@ class DSOTraceParam(ParameterWithSetpoints):
         return "''"
 
     @unit.setter
-    def unit(self, val: Any) -> None:
+    def unit(self, unit: Any) -> None:
         """
         Stub to allow initialization.
         """
         return
 
-    def update_setpoints(self, preamble: Optional[Sequence[str]] = None) -> None:
+    def update_setpoints(self, preamble: "Sequence[str] | None" = None) -> None:
         """
         Update waveform parameters. Must be called before data
         acquisition if instr.cache_setpoints is False
         """
-        instrument: Union[KeysightInfiniiumChannel, KeysightInfiniiumFunction]
+        instrument: KeysightInfiniiumChannel | KeysightInfiniiumFunction
         instrument = self.instrument  # type: ignore[assignment]
         if preamble is None:
             instrument.write(f":WAV:SOUR {self._channel}")
@@ -200,7 +207,7 @@ class DSOTraceParam(ParameterWithSetpoints):
         """
         if self.instrument is None:
             raise RuntimeError("Cannot get data without instrument")
-        root_instr: "KeysightInfiniium" = self.root_instrument  # type: ignore[assignment]
+        root_instr: KeysightInfiniium = self.root_instrument  # type: ignore[assignment]
         # Check if we can use cached trace parameters
         if not root_instr.cache_setpoints():
             self.update_setpoints()
@@ -242,7 +249,12 @@ class AbstractMeasurementSubsystem(InstrumentModule):
     the measurement value.
     """
 
-    def __init__(self, parent: InstrumentBase, name: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        parent: InstrumentBase,
+        name: str,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
+    ) -> None:
         """
         Add parameters to measurement subsystem. Note: This should not be initialized
         directly, rather initialize BoundMeasurementSubsystem
@@ -252,7 +264,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
 
         ###################################
         # Voltage Parameters
-        self.amplitude = Parameter(
+        self.amplitude: Parameter = Parameter(
             name="amplitude",
             instrument=self,
             label="Voltage amplitude",
@@ -261,7 +273,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.average = Parameter(
+        self.average: Parameter = Parameter(
             name="average",
             instrument=self,
             label="Voltage average",
@@ -270,7 +282,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.base = Parameter(
+        self.base: Parameter = Parameter(
             name="base",
             instrument=self,
             label="Statistical base",
@@ -281,7 +293,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
         )
         # Threshold Voltage Measurements - this measurement ignores overshoot
         # in the data
-        self.vlow = Parameter(
+        self.vlow: Parameter = Parameter(
             name="vlow",
             instrument=self,
             label="Lower threshold voltage",
@@ -290,7 +302,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.vmid = Parameter(
+        self.vmid: Parameter = Parameter(
             name="vmid",
             instrument=self,
             label="Middle threshold voltage",
@@ -299,7 +311,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.vup = Parameter(
+        self.vup: Parameter = Parameter(
             name="vup",
             instrument=self,
             label="Upper threshold voltage",
@@ -309,7 +321,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             snapshot_value=False,
         )
         # Limit values - the minimum/maximum shown on screen
-        self.vmin = Parameter(
+        self.vmin: Parameter = Parameter(
             name="vmin",
             instrument=self,
             label="Voltage minimum",
@@ -318,7 +330,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.vmax = Parameter(
+        self.vmax: Parameter = Parameter(
             name="vmax",
             instrument=self,
             label="Voltage maximum",
@@ -328,7 +340,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             snapshot_value=False,
         )
         # Waveform Parameters
-        self.overshoot = Parameter(
+        self.overshoot: Parameter = Parameter(
             name="overshoot",
             instrument=self,
             label="Voltage overshoot",
@@ -346,7 +358,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V",
             snapshot_value=False,
         )
-        self.vrms = Parameter(
+        self.vrms: Parameter = Parameter(
             name="vrms",
             instrument=self,
             label="Voltage RMS",
@@ -355,7 +367,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="V_rms",
             snapshot_value=False,
         )
-        self.vrms_dc = Parameter(
+        self.vrms_dc: Parameter = Parameter(
             name="vrms_dc",
             instrument=self,
             label="Voltage RMS with DC Component",
@@ -367,7 +379,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
 
         ###################################
         # Time Parameters
-        self.rise_time = Parameter(
+        self.rise_time: Parameter = Parameter(
             name="rise_time",
             instrument=self,
             label="Rise time",
@@ -376,7 +388,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="s",
             snapshot_value=False,
         )
-        self.fall_time = Parameter(
+        self.fall_time: Parameter = Parameter(
             name="fall_time",
             instrument=self,
             label="Fall time",
@@ -385,7 +397,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="s",
             snapshot_value=False,
         )
-        self.duty_cycle = Parameter(
+        self.duty_cycle: Parameter = Parameter(
             name="duty_cycle",
             instrument=self,
             label="Duty Cycle",
@@ -394,7 +406,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="%",
             snapshot_value=False,
         )
-        self.period = Parameter(
+        self.period: Parameter = Parameter(
             name="period",
             instrument=self,
             label="Period",
@@ -403,7 +415,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
             unit="s",
             snapshot_value=False,
         )
-        self.frequency = Parameter(
+        self.frequency: Parameter = Parameter(
             name="frequency",
             instrument=self,
             label="Signal frequency",
@@ -417,7 +429,7 @@ class AbstractMeasurementSubsystem(InstrumentModule):
                                      """,
             snapshot_value=False,
         )
-        self.slew_rate = Parameter(
+        self.slew_rate: Parameter = Parameter(
             name="slew_rate",
             instrument=self,
             label="Slew rate",
@@ -454,9 +466,9 @@ class AbstractMeasurementSubsystem(InstrumentModule):
 class KeysightInfiniiumBoundMeasurement(AbstractMeasurementSubsystem):
     def __init__(
         self,
-        parent: Union["KeysightInfiniiumChannel", "KeysightInfiniiumFunction"],
+        parent: "KeysightInfiniiumChannel | KeysightInfiniiumFunction",
         name: str,
-        **kwargs: Any,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
     ):
         """
         Initialize measurement subsystem bound to a specific channel
@@ -475,7 +487,12 @@ Alias for backwards compatibility
 
 
 class KeysightInfiniiumUnboundMeasurement(AbstractMeasurementSubsystem):
-    def __init__(self, parent: "KeysightInfiniium", name: str, **kwargs: Any):
+    def __init__(
+        self,
+        parent: "KeysightInfiniium",
+        name: str,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
+    ):
         """
         Initialize measurement subsystem where target is set by the parameter `source`.
         """
@@ -551,7 +568,11 @@ Alias for backwards compatibility
 
 class KeysightInfiniiumFunction(InstrumentChannel):
     def __init__(
-        self, parent: "KeysightInfiniium", name: str, channel: int, **kwargs: Any
+        self,
+        parent: "KeysightInfiniium",
+        name: str,
+        channel: int,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
     ):
         """
         Initialize an infiniium channel.
@@ -570,14 +591,14 @@ class KeysightInfiniiumFunction(InstrumentChannel):
         )
 
         # Retrieve basic settings of the function
-        self.function = Parameter(
+        self.function: Parameter = Parameter(
             name="function",
             instrument=self,
             label=f"Function {channel} function",
             get_cmd=self._get_func,
             vals=vals.Strings(),
         )
-        self.source = Parameter(
+        self.source: Parameter = Parameter(
             name="source",
             instrument=self,
             label=f"Function {channel} source",
@@ -585,7 +606,7 @@ class KeysightInfiniiumFunction(InstrumentChannel):
         )
 
         # Trace settings
-        self.points = Parameter(
+        self.points: Parameter = Parameter(
             name="points",
             instrument=self,
             label=f"Function {channel} points",
@@ -669,7 +690,11 @@ Alias for backwards compatibility
 
 class KeysightInfiniiumChannel(InstrumentChannel):
     def __init__(
-        self, parent: "KeysightInfiniium", name: str, channel: int, **kwargs: Any
+        self,
+        parent: "KeysightInfiniium",
+        name: str,
+        channel: int,
+        **kwargs: "Unpack[InstrumentBaseKWArgs]",
     ):
         """
         Initialize an infiniium channel.
@@ -677,8 +702,26 @@ class KeysightInfiniiumChannel(InstrumentChannel):
         self._channel = channel
 
         super().__init__(parent, name, **kwargs)
+
+        # input
+        # On MXR/EXR-Series oscilloscopes:
+        # DC — DC coupling, 1 MΩ impedance.
+        # DC50 | DCFifty — DC coupling, 50Ω impedance.
+        # AC — AC coupling, 1 MΩ impedance.
+        # LFR1 | LFR2 — AC 1 MΩ input impedance.
+        # When no probe is attached, the coupling for each channel can be AC, DC, DC50, or DCFifty.
+        # If you have an 1153A probe attached, the valid parameters are DC, LFR1, and LFR2 (low-frequency reject).
+        self.input: Parameter = Parameter(
+            name="input",
+            instrument=self,
+            label=f"Channel {channel} input coupling & impedance",
+            set_cmd=f"CHAN{channel}:INP {{}}",
+            get_cmd=f"CHAN{channel}:INP?",
+            vals=vals.Enum("DC", "DC50", "AC", "LFR1", "LFR2"),
+        )
+
         # display
-        self.display = Parameter(
+        self.display: Parameter = Parameter(
             name="display",
             instrument=self,
             label=f"Channel {channel} display on/off",
@@ -688,7 +731,7 @@ class KeysightInfiniiumChannel(InstrumentChannel):
         )
 
         # scaling
-        self.offset = Parameter(
+        self.offset: Parameter = Parameter(
             name="offset",
             instrument=self,
             label=f"Channel {channel} offset",
@@ -697,7 +740,7 @@ class KeysightInfiniiumChannel(InstrumentChannel):
             get_cmd=f"CHAN{channel}:OFFS?",
             get_parser=float,
         )
-        self.range = Parameter(
+        self.range: Parameter = Parameter(
             name="range",
             instrument=self,
             label=f"Channel {channel} range",
@@ -709,7 +752,7 @@ class KeysightInfiniiumChannel(InstrumentChannel):
         )
 
         # Trigger level
-        self.trigger_level = Parameter(
+        self.trigger_level: Parameter = Parameter(
             name="trigger_level",
             instrument=self,
             label=f"Channel {channel} trigger level",
@@ -775,14 +818,16 @@ class KeysightInfiniium(VisaInstrument):
     This is the QCoDeS driver for the Keysight Infiniium oscilloscopes
     """
 
+    default_timeout = 20
+    default_terminator = "\n"
+
     def __init__(
         self,
         name: str,
         address: str,
-        timeout: float = 20,
         channels: int = 4,
         silence_pyvisapy_warning: bool = False,
-        **kwargs: Any,
+        **kwargs: "Unpack[VisaInstrumentKWArgs]",
     ):
         """
         Initialises the oscilloscope.
@@ -793,8 +838,10 @@ class KeysightInfiniium(VisaInstrument):
             timeout: Visa timeout, in secs.
             channels: The number of channels on the scope.
             silence_pyvisapy_warning: Don't warn about pyvisa-py at startup
+            **kwargs: kwargs are forwarded to base class.
+
         """
-        super().__init__(name, address, timeout=timeout, terminator="\n", **kwargs)
+        super().__init__(name, address, **kwargs)
         self.connect_message()
 
         # Check if we are using pyvisa-py as our visa lib and warn users that
@@ -826,7 +873,7 @@ class KeysightInfiniium(VisaInstrument):
         self.no_channels = channels
 
         # Run state
-        self.run_mode = Parameter(
+        self.run_mode: Parameter = Parameter(
             name="run_mode",
             instrument=self,
             label="run mode",
@@ -835,7 +882,7 @@ class KeysightInfiniium(VisaInstrument):
         )
 
         # Timing Parameters
-        self.timebase_range = Parameter(
+        self.timebase_range: Parameter = Parameter(
             name="timebase_range",
             instrument=self,
             label="Range of the time axis",
@@ -845,7 +892,7 @@ class KeysightInfiniium(VisaInstrument):
             vals=vals.Numbers(5e-12, 20),
             get_parser=float,
         )
-        self.timebase_position = Parameter(
+        self.timebase_position: Parameter = Parameter(
             name="timebase_position",
             instrument=self,
             label="Offset of the time axis",
@@ -855,7 +902,7 @@ class KeysightInfiniium(VisaInstrument):
             vals=vals.Numbers(),
             get_parser=float,
         )
-        self.timebase_roll_enabled = Parameter(
+        self.timebase_roll_enabled: Parameter = Parameter(
             name="timebase_roll_enabled",
             instrument=self,
             label="Is rolling mode enabled",
@@ -865,13 +912,13 @@ class KeysightInfiniium(VisaInstrument):
         )
 
         # Trigger
-        self.trigger_mode = Parameter(
+        self.trigger_mode: Parameter = Parameter(
             name="trigger_mode",
             instrument=self,
             label="Trigger mode",
             get_cmd=":TRIG:MODE?",
         )
-        self.trigger_sweep = Parameter(
+        self.trigger_sweep: Parameter = Parameter(
             name="trigger_sweep",
             instrument=self,
             label="Trigger sweep mode",
@@ -879,7 +926,7 @@ class KeysightInfiniium(VisaInstrument):
             set_cmd=":TRIG:SWE {}",
             vals=vals.Enum("AUTO", "TRIG"),
         )
-        self.trigger_state = Parameter(
+        self.trigger_state: Parameter = Parameter(
             name="trigger_state",
             instrument=self,
             label="Trigger state",
@@ -892,7 +939,7 @@ class KeysightInfiniium(VisaInstrument):
         # Note that for now we only support parameterized edge triggers - this may
         # be something worth expanding.
         # To set trigger level, use the "trigger_level" parameter in each channel
-        self.trigger_edge_source = Parameter(
+        self.trigger_edge_source: Parameter = Parameter(
             name="trigger_edge_source",
             instrument=self,
             label="Source channel for the edge trigger",
@@ -900,13 +947,13 @@ class KeysightInfiniium(VisaInstrument):
             set_cmd=":TRIGger:EDGE:SOURce {}",
             vals=vals.Enum(
                 *(
-                    [f"CHAN{i}" for i in range(1, 4 + 1)]
+                    [f"CHAN{i}" for i in range(1, self.no_channels + 1)]
                     + [f"DIG{i}" for i in range(16 + 1)]
                     + ["AUX", "LINE"]
                 )
             ),
         )
-        self.trigger_edge_slope = Parameter(
+        self.trigger_edge_slope: Parameter = Parameter(
             name="trigger_edge_slope",
             instrument=self,
             label="slope of the edge trigger",
@@ -914,7 +961,7 @@ class KeysightInfiniium(VisaInstrument):
             set_cmd=":TRIGger:EDGE:SLOPe {}",
             vals=vals.Enum("POS", "POSITIVE", "NEG", "NEGATIVE", "EITH"),
         )
-        self.trigger_level_aux = Parameter(
+        self.trigger_level_aux: Parameter = Parameter(
             name="trigger_level_aux",
             instrument=self,
             label="Trigger level AUX",
@@ -928,7 +975,7 @@ class KeysightInfiniium(VisaInstrument):
         # Aquisition
         # If sample points, rate and timebase_scale are set in an
         # incomensurate way, the scope only displays part of the waveform
-        self.acquire_points = Parameter(
+        self.acquire_points: Parameter = Parameter(
             name="acquire_points",
             instrument=self,
             label="sample points",
@@ -937,7 +984,7 @@ class KeysightInfiniium(VisaInstrument):
             get_parser=int,
             vals=vals.Numbers(min_value=self.min_pts, max_value=self.max_pts),
         )
-        self.sample_rate = Parameter(
+        self.sample_rate: Parameter = Parameter(
             name="sample_rate",
             instrument=self,
             label="sample rate",
@@ -948,7 +995,7 @@ class KeysightInfiniium(VisaInstrument):
             vals=vals.Numbers(min_value=self.min_srat, max_value=self.max_srat),
         )
         # Note: newer scopes allow a per-channel bandwidth. This is not implemented yet.
-        self.bandwidth = Parameter(
+        self.bandwidth: Parameter = Parameter(
             name="bandwidth",
             instrument=self,
             label="bandwidth",
@@ -958,14 +1005,14 @@ class KeysightInfiniium(VisaInstrument):
             get_parser=float,
             vals=vals.Numbers(min_value=self.min_bw, max_value=self.max_bw),
         )
-        self.acquire_interpolate = Parameter(
+        self.acquire_interpolate: Parameter = Parameter(
             name="acquire_interpolate",
             instrument=self,
             get_cmd=":ACQ:INTerpolate?",
             set_cmd=":ACQuire:INTerpolate {}",
             vals=vals.Enum(0, 1, "INT1", "INT2", "INT4", "INT8", "INT16", "INT32"),
         )
-        self.acquire_mode = Parameter(
+        self.acquire_mode: Parameter = Parameter(
             name="acquire_mode",
             instrument=self,
             label="Acquisition mode",
@@ -981,7 +1028,7 @@ class KeysightInfiniium(VisaInstrument):
                 "SEGHres",
             ),
         )
-        self.average = Parameter(
+        self.average: Parameter = Parameter(
             name="average",
             instrument=self,
             label="Averages",
@@ -1095,7 +1142,7 @@ class KeysightInfiniium(VisaInstrument):
         # Sample Rate
         try:
             # Set BW to auto in order to query this
-            bw_set: Union[float, Literal["AUTO"]] = float(self.ask(":ACQ:BAND?"))
+            bw_set: float | Literal["AUTO"] = float(self.ask(":ACQ:BAND?"))
             if np.isclose(bw_set, self.max_bw):
                 # Auto returns max bandwidth
                 bw_set = "AUTO"
@@ -1172,7 +1219,7 @@ class KeysightInfiniium(VisaInstrument):
             if channel.display():
                 channel.update_setpoints()
 
-    def digitize(self, timeout: Optional[int] = None) -> None:
+    def digitize(self, timeout: int | None = None) -> None:
         """
         Digitize a full waveform and block until the acquisition is complete.
 
@@ -1209,6 +1256,46 @@ class KeysightInfiniium(VisaInstrument):
             self.device_clear()
             if timeout is not None:
                 self.visa_handle.timeout = old_timeout
+
+    def screenshot(
+        self,
+        path: str | Path = "./screenshot",
+        with_time: bool = False,
+        time_fmt: str = "%Y-%m-%d_%H-%M-%S",
+        divider: str = "_",
+    ) -> np.ndarray | None:
+        """Save screen to {path} with {image_type}: bmp, jpg, gif, tif, png
+
+        return np.array if sucessfully saved, else return None
+        """
+        from datetime import datetime
+        from io import BytesIO
+        from os.path import splitext
+
+        from PIL.Image import open as pil_open
+
+        if isinstance(path, Path):
+            path = str(path)
+
+        time_str = datetime.now().strftime(time_fmt) if with_time else ""
+        img_name, img_type = splitext(path)
+        img_path = (
+            f"{img_name}{divider if with_time else ''}{time_str}{img_type.lower()}"
+        )
+        try:
+            with open(img_path, "wb") as f:
+                screen_bytes = self.visa_handle.query_binary_values(
+                    f":DISPlay:DATA? {img_type.upper()[1:]}",  # without .
+                    # https://docs.python.org/3/library/struct.html#format-characters
+                    datatype="B",  # Capitcal B for unsigned byte
+                    container=bytes,
+                )
+                f.write(screen_bytes)  # type: ignore[arg-type]
+            print(f"Screen image written to {img_path}")
+            return np.asarray(pil_open(BytesIO(screen_bytes)))  # type: ignore[arg-type]
+        except Exception as e:
+            self.log.error(f"Failed to save screenshot, Error occurred: \n{e}")
+            return None
 
 
 Infiniium = KeysightInfiniium

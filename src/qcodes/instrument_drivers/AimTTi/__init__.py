@@ -1,4 +1,4 @@
-from ._AimTTi_PL_P import AimTTiChannel, NotKnownModel
+from ._AimTTi_PL_P import AimTTi, AimTTiChannel, NotKnownModel
 from .Aim_TTi_PL068_P import AimTTiPL068P
 from .Aim_TTi_PL155_P import AimTTiPL155P
 from .Aim_TTi_PL303_P import AimTTiPL303P
@@ -9,6 +9,7 @@ from .Aim_TTi_QL355_TP import AimTTiQL355TP
 from .Aim_TTi_QL564_P import AimTTiQL564P
 
 __all__ = [
+    "AimTTi",
     "AimTTiChannel",
     "AimTTiPL068P",
     "AimTTiPL155P",

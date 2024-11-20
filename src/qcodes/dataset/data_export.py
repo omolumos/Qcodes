@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 from typing_extensions import TypedDict
 
-from qcodes.dataset.data_set_protocol import DataSetProtocol
-from qcodes.dataset.descriptions.param_spec import ParamSpecBase
 from qcodes.utils import list_of_data_to_maybe_ragged_nd_array
+
+if TYPE_CHECKING:
+    from qcodes.dataset.data_set_protocol import DataSetProtocol
+    from qcodes.dataset.descriptions.param_spec import ParamSpecBase
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +19,7 @@ class DSPlotData(TypedDict):
     """
     The dictionary used to represent data for use within `plot_dataset`
     """
+
     name: str
     unit: str
     label: str
@@ -69,6 +73,7 @@ def _all_steps_multiples_of_min_step(rows: np.ndarray) -> bool:
 
     Returns:
         The answer to the question
+
     """
 
     steps_list: list[np.ndarray] = []
@@ -77,7 +82,7 @@ def _all_steps_multiples_of_min_step(rows: np.ndarray) -> bool:
         steps_list += list(np.unique(np.diff(row).round(decimals=15)))
 
     steps = np.unique(steps_list)
-    remainders = np.mod(steps[1:]/steps[0], 1)
+    remainders = np.mod(steps[1:] / steps[0], 1)
 
     # TODO: What are reasonable tolerances for allclose?
     asmoms = bool(np.allclose(remainders, np.zeros_like(remainders)))
@@ -93,10 +98,11 @@ def _rows_from_datapoints(inputsetpoints: np.ndarray) -> np.ndarray:
     but they can nonetheless be used to identify certain scan types
 
     Args:
-        setpoints: The raw setpoints as a one-dimensional array
+        inputsetpoints: The raw setpoints as a one-dimensional array
 
     Returns:
         A ndarray of the rows
+
     """
 
     rows = []
@@ -104,8 +110,7 @@ def _rows_from_datapoints(inputsetpoints: np.ndarray) -> np.ndarray:
 
     # first check if there is only one unique array in which case we can avoid the
     # potentially slow loop below
-    temp, inds, count = np.unique(setpoints, return_index=True,
-                                  return_counts=True)
+    temp, inds, count = np.unique(setpoints, return_index=True, return_counts=True)
     num_repeats_array = np.unique(count)
     if len(num_repeats_array) == 1 and count.sum() == len(inputsetpoints):
         return np.tile(temp, (num_repeats_array[0], 1))
@@ -137,6 +142,7 @@ def _all_in_group_or_subgroup(rows: np.ndarray) -> bool:
     Returns:
         A boolean indicating whether the setpoints meet the
             criterion
+
     """
 
     groups = 1
@@ -159,7 +165,7 @@ def _all_in_group_or_subgroup(rows: np.ndarray) -> bool:
     # if there are two groups, check that the rows of one group
     # are all contained in the rows of the other
     if aigos and switchindex > 0:
-        for row in rows[1+switchindex:]:
+        for row in rows[1 + switchindex :]:
             if sum(r in rows[0] for r in row) != len(row):
                 aigos = False
                 break
@@ -175,10 +181,11 @@ def _strings_as_ints(inputarray: np.ndarray) -> np.ndarray:
 
     Args:
         inputarray: A 1D array of strings
+
     """
     newdata = np.zeros(len(inputarray))
     for n, word in enumerate(np.unique(inputarray)):
-        newdata += ((inputarray == word).astype(int)*n)
+        newdata += (inputarray == word).astype(int) * n
     return newdata
 
 
@@ -197,15 +204,16 @@ def get_1D_plottype(xpoints: np.ndarray, ypoints: np.ndarray) -> str:
 
     Returns:
         Determined plot type as a string
+
     """
 
     if isinstance(xpoints[0], str) and not isinstance(ypoints[0], str):
         if len(xpoints) == len(np.unique(xpoints)):
-            return '1D_bar'
+            return "1D_bar"
         else:
-            return '1D_point'
+            return "1D_point"
     if isinstance(xpoints[0], str) or isinstance(ypoints[0], str):
-        return '1D_point'
+        return "1D_point"
     else:
         return datatype_from_setpoints_1d(xpoints)
 
@@ -224,16 +232,17 @@ def datatype_from_setpoints_1d(setpoints: np.ndarray) -> str:
 
     Returns:
         A string representing the plot type as described above
+
     """
     if np.allclose(setpoints, setpoints[0]):
-        return '1D_point'
+        return "1D_point"
     else:
-        return '1D_line'
+        return "1D_line"
 
 
-def get_2D_plottype(xpoints: np.ndarray,
-                    ypoints: np.ndarray,
-                    zpoints: np.ndarray) -> str:
+def get_2D_plottype(
+    xpoints: np.ndarray, ypoints: np.ndarray, zpoints: np.ndarray
+) -> str:
     """
     Determine plot type for a 2D plot by inspecting the data
 
@@ -251,15 +260,14 @@ def get_2D_plottype(xpoints: np.ndarray,
 
     Returns:
         Determined plot type as a string
+
     """
 
     plottype = datatype_from_setpoints_2d(xpoints, ypoints)
     return plottype
 
 
-def datatype_from_setpoints_2d(xpoints: np.ndarray,
-                               ypoints: np.ndarray
-                               ) -> str:
+def datatype_from_setpoints_2d(xpoints: np.ndarray, ypoints: np.ndarray) -> str:
     """
     For a 2D plot, figure out what kind of visualisation we can use
     to display the data.
@@ -278,6 +286,7 @@ def datatype_from_setpoints_2d(xpoints: np.ndarray,
 
     Returns:
         A string with the name of the determined plot type
+
     """
     # We represent categorical data as integer-valued data
     if isinstance(xpoints[0], str):
@@ -291,7 +300,7 @@ def datatype_from_setpoints_2d(xpoints: np.ndarray,
     y_all_the_same = np.allclose(ypoints, ypoints[0])
 
     if x_all_the_same or y_all_the_same:
-        return '2D_point'
+        return "2D_point"
 
     # Now check if this is a simple rectangular sweep,
     # possibly interrupted in the middle of one row
@@ -307,16 +316,16 @@ def datatype_from_setpoints_2d(xpoints: np.ndarray,
 
     # this is the check that we are on a "simple" grid
     if y_check and x_check:
-        return '2D_grid'
+        return "2D_grid"
 
     x_check = _all_steps_multiples_of_min_step(xrows)
     y_check = _all_steps_multiples_of_min_step(yrows)
 
     # this is the check that we are on an equidistant grid
     if y_check and x_check:
-        return '2D_equidistant'
+        return "2D_equidistant"
 
-    return '2D_unknown'
+    return "2D_unknown"
 
 
 def reshape_2D_data(
@@ -328,10 +337,10 @@ def reshape_2D_data(
     ny = len(yrow)
 
     # potentially slow method of filling in the data, should be optimised
-    log.debug('Sorting 2D data onto grid')
+    log.debug("Sorting 2D data onto grid")
 
     if isinstance(z[0], str):
-        z_to_plot = np.full((ny, nx), '', dtype=z.dtype)
+        z_to_plot = np.full((ny, nx), "", dtype=z.dtype)
     else:
         z_to_plot = np.full((ny, nx), np.nan)
     x_index = np.zeros_like(x, dtype=np.dtype(np.int_))

@@ -3,9 +3,8 @@ from __future__ import annotations
 import cProfile
 import os
 from functools import wraps
-from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import pytest
 from typing_extensions import ParamSpec
@@ -13,11 +12,15 @@ from typing_extensions import ParamSpec
 from qcodes.metadatable import MetadatableWithName
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
     from pytest import ExceptionInfo
 
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
 
 def retry_until_does_not_throw(
     exception_class_to_expect: type[Exception] = AssertionError,
@@ -44,20 +47,18 @@ def retry_until_does_not_throw(
                                 # the number of tries is exceeded.
 
     Args:
-        exception_class_to_expect
-            Only in case of this exception the function will be called again
-        tries
-            Number of times to retry calling the function before giving up
-        delay
-            Delay between retries of the function call, in seconds
+        exception_class_to_expect: Only in case of this exception the
+            function will be called again
+        tries: Number of times to retry calling the function before giving up
+        delay: Delay between retries of the function call, in seconds
 
     Returns:
         A callable that runs the decorated function until it does not throw
         a given exception
+
     """
 
     def retry_until_passes_decorator(func: Callable[P, T]) -> Callable[P, T]:
-
         @wraps(func)
         def func_retry(*args: P.args, **kwargs: P.kwargs) -> T:
             tries_left = tries - 1
@@ -91,11 +92,12 @@ def profile(func: Callable[P, T]) -> Callable[P, T]:
     """
 
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        profile_filename = func.__name__ + '.prof'
+        profile_filename = func.__name__ + ".prof"
         profiler = cProfile.Profile()
         result = profiler.runcall(func, *args, **kwargs)
         profiler.dump_stats(profile_filename)
         return result
+
     return wrapper
 
 
@@ -107,6 +109,7 @@ def error_caused_by(excinfo: ExceptionInfo[Any], cause: str) -> bool:
     Args:
         excinfo: the output of with pytest.raises() as excinfo
         cause: the error message or a substring of it
+
     """
 
     exc_repr = excinfo.getrepr()
@@ -139,7 +142,6 @@ def skip_if_no_fixtures(dbname: str | Path) -> None:
 
 
 class DummyComponent(MetadatableWithName):
-
     """Docstring for DummyComponent."""
 
     def __init__(self, name: str):

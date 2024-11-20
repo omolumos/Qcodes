@@ -1,9 +1,8 @@
 import io
 import random
 import re
-from collections.abc import Sequence
 from copy import copy
-from typing import ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar
 
 import hypothesis.strategies as hst
 import numpy as np
@@ -33,6 +32,9 @@ from qcodes.utils.types import complex_types, numpy_complex, numpy_floats, numpy
 from tests.common import error_caused_by
 from tests.dataset.helper_functions import verify_data_dict
 from tests.dataset.test_links import generate_some_links
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 n_experiments = 0
 
@@ -1302,12 +1304,12 @@ def test_get_parameter_data_independent_parameters(
 
 def parameter_test_helper(
     ds: DataSet,
-    toplevel_names: Sequence[str],
+    toplevel_names: "Sequence[str]",
     expected_names: dict[str, list[str]],
     expected_shapes: dict[str, list[tuple[int, ...]]],
     expected_values: dict[str, list[np.ndarray]],
-    start: Optional[int] = None,
-    end: Optional[int] = None,
+    start: int | None = None,
+    end: int | None = None,
 ):
     """
     A helper function to compare the data we actually read out of a given
@@ -1323,6 +1325,8 @@ def parameter_test_helper(
             all the loaded parameters for a given requested parameter.
         expected_values: expected content of the data arrays stored in a
             sequenceexpected_names:
+        start: If given first row to compare.
+        end: If given last row to compare.
 
     """
 

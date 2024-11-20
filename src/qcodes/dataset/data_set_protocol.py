@@ -2,28 +2,23 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Literal,
     Protocol,
-    Union,
     runtime_checkable,
 )
 
 import numpy as np
-from typing_extensions import TypeAlias
 
 from qcodes.dataset.descriptions.dependencies import InterDependencies_
 from qcodes.dataset.descriptions.param_spec import ParamSpec, ParamSpecBase
-from qcodes.dataset.descriptions.rundescriber import RunDescriber
-from qcodes.dataset.descriptions.versioning.rundescribertypes import Shapes
 from qcodes.dataset.export_config import (
     DataExportType,
     get_data_export_name_elements,
@@ -31,50 +26,46 @@ from qcodes.dataset.export_config import (
     get_data_export_prefix,
     get_data_export_type,
 )
-from qcodes.dataset.linked_datasets.links import Link
 
 from .descriptions.versioning.converters import new_to_old
-from .exporters.export_info import ExportInfo
 from .exporters.export_to_csv import dataframe_to_csv
 from .exporters.export_to_xarray import xarray_to_h5netcdf_with_complex_numbers
 from .sqlite.queries import raw_time_to_str_time
 
-if sys.version_info >= (3, 10):
-    # new entrypoints api was added in 3.10
-    from importlib.metadata import entry_points
-else:
-    # 3.9 and earlier
-    from importlib_metadata import entry_points
-
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     import pandas as pd
     import xarray as xr
 
+    from qcodes.dataset.descriptions.rundescriber import RunDescriber
+    from qcodes.dataset.descriptions.versioning.rundescribertypes import Shapes
+    from qcodes.dataset.linked_datasets.links import Link
     from qcodes.parameters import ParameterBase
 
     from .data_set_cache import DataSetCache
+    from .exporters.export_info import ExportInfo
 
 # for unknown reason entrypoints registered in pyproct.toml shows up
 # twice here convert to set to ensure no duplication.
 _EXPORT_CALLBACKS = set(entry_points(group="qcodes.dataset.on_export"))
 
-# even with from __future__ import annotations
-# type aliases must use the old format until we drop 3.8/3.9
 array_like_types = (tuple, list, np.ndarray)
-scalar_res_types: TypeAlias = Union[
-    str, complex, np.integer, np.floating, np.complexfloating
-]
-values_type: TypeAlias = Union[scalar_res_types, np.ndarray, Sequence[scalar_res_types]]
-res_type: TypeAlias = tuple[Union["ParameterBase", str], values_type]
-setpoints_type: TypeAlias = Sequence[Union[str, "ParameterBase"]]
+scalar_res_types: TypeAlias = (
+    str | complex | np.integer | np.floating | np.complexfloating
+)
+values_type: TypeAlias = scalar_res_types | np.ndarray | Sequence[scalar_res_types]
+res_type: TypeAlias = "tuple[ParameterBase | str, values_type]"
+setpoints_type: TypeAlias = "Sequence[str | ParameterBase]"
 SPECS: TypeAlias = list[ParamSpec]
 # Transition period type: SpecsOrInterDeps. We will allow both as input to
 # the DataSet constructor for a while, then deprecate SPECS and finally remove
 # the ParamSpec class
-SpecsOrInterDeps: TypeAlias = Union[SPECS, InterDependencies_]
+SpecsOrInterDeps: TypeAlias = SPECS | InterDependencies_
 ParameterData: TypeAlias = dict[str, dict[str, np.ndarray]]
 
 LOG = logging.getLogger(__name__)
+
 
 class CompletedError(RuntimeError):
     pass
@@ -82,7 +73,6 @@ class CompletedError(RuntimeError):
 
 @runtime_checkable
 class DataSetProtocol(Protocol):
-
     # the "persistent traits" are the attributes/properties of the DataSet
     # that are NOT tied to the representation of the DataSet in any particular
     # database
@@ -111,115 +101,87 @@ class DataSetProtocol(Protocol):
         shapes: Shapes | None = None,
         parent_datasets: Sequence[Mapping[Any, Any]] = (),
         write_in_background: bool = False,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @property
-    def pristine(self) -> bool:
-        ...
+    def pristine(self) -> bool: ...
 
     @property
-    def running(self) -> bool:
-        ...
+    def running(self) -> bool: ...
 
     @property
-    def completed(self) -> bool:
-        ...
+    def completed(self) -> bool: ...
 
-    def mark_completed(self) -> None:
-        ...
+    def mark_completed(self) -> None: ...
 
     # dataset attributes
 
     @property
-    def run_id(self) -> int:
-        ...
+    def run_id(self) -> int: ...
 
     @property
-    def captured_run_id(self) -> int:
-        ...
+    def captured_run_id(self) -> int: ...
 
     @property
-    def counter(self) -> int:
-        ...
+    def counter(self) -> int: ...
 
     @property
-    def captured_counter(self) -> int:
-        ...
+    def captured_counter(self) -> int: ...
 
     @property
-    def guid(self) -> str:
-        ...
+    def guid(self) -> str: ...
 
     @property
-    def number_of_results(self) -> int:
-        ...
+    def number_of_results(self) -> int: ...
 
     @property
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
-    def exp_name(self) -> str:
-        ...
+    def exp_name(self) -> str: ...
 
     @property
-    def exp_id(self) -> int:
-        ...
+    def exp_id(self) -> int: ...
 
     @property
-    def sample_name(self) -> str:
-        ...
+    def sample_name(self) -> str: ...
 
-    def run_timestamp(self, fmt: str = "%Y-%m-%d %H:%M:%S") -> str | None:
-        ...
+    def run_timestamp(self, fmt: str = "%Y-%m-%d %H:%M:%S") -> str | None: ...
 
     @property
-    def run_timestamp_raw(self) -> float | None:
-        ...
+    def run_timestamp_raw(self) -> float | None: ...
 
-    def completed_timestamp(self, fmt: str = "%Y-%m-%d %H:%M:%S") -> str | None:
-        ...
+    def completed_timestamp(self, fmt: str = "%Y-%m-%d %H:%M:%S") -> str | None: ...
 
     @property
-    def completed_timestamp_raw(self) -> float | None:
-        ...
+    def completed_timestamp_raw(self) -> float | None: ...
 
     # snapshot and metadata
     @property
-    def snapshot(self) -> dict[str, Any] | None:
-        ...
+    def snapshot(self) -> dict[str, Any] | None: ...
 
-    def add_snapshot(self, snapshot: str, overwrite: bool = False) -> None:
-        ...
+    def add_snapshot(self, snapshot: str, overwrite: bool = False) -> None: ...
 
     @property
-    def _snapshot_raw(self) -> str | None:
-        ...
+    def _snapshot_raw(self) -> str | None: ...
 
-    def add_metadata(self, tag: str, metadata: Any) -> None:
-        ...
+    def add_metadata(self, tag: str, metadata: Any) -> None: ...
 
     @property
-    def metadata(self) -> dict[str, Any]:
-        ...
+    def metadata(self) -> dict[str, Any]: ...
 
     @property
-    def path_to_db(self) -> str | None:
-        ...
+    def path_to_db(self) -> str | None: ...
 
     # dataset description and links
     @property
-    def paramspecs(self) -> dict[str, ParamSpec]:
-        ...
+    def paramspecs(self) -> dict[str, ParamSpec]: ...
 
     @property
-    def description(self) -> RunDescriber:
-        ...
+    def description(self) -> RunDescriber: ...
 
     @property
-    def parent_dataset_links(self) -> list[Link]:
-        ...
+    def parent_dataset_links(self) -> list[Link]: ...
 
     # data related members
 
@@ -229,16 +191,13 @@ class DataSetProtocol(Protocol):
         path: Path | str | None = None,
         prefix: str | None = None,
         automatic_export: bool = False,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @property
-    def export_info(self) -> ExportInfo:
-        ...
+    def export_info(self) -> ExportInfo: ...
 
     @property
-    def cache(self) -> DataSetCache[DataSetProtocol]:
-        ...
+    def cache(self) -> DataSetCache[DataSetProtocol]: ...
 
     def get_parameter_data(
         self,
@@ -246,17 +205,14 @@ class DataSetProtocol(Protocol):
         start: int | None = None,
         end: int | None = None,
         callback: Callable[[float], None] | None = None,
-    ) -> ParameterData:
-        ...
-
+    ) -> ParameterData: ...
 
     def get_parameters(self) -> SPECS:
         # used by plottr
         ...
 
     @property
-    def dependent_parameters(self) -> tuple[ParamSpecBase, ...]:
-        ...
+    def dependent_parameters(self) -> tuple[ParamSpecBase, ...]: ...
 
     # exporters to other in memory formats
 
@@ -266,8 +222,7 @@ class DataSetProtocol(Protocol):
         start: int | None = None,
         end: int | None = None,
         use_multi_index: Literal["auto", "always", "never"] = "auto",
-    ) -> dict[str, xr.DataArray]:
-        ...
+    ) -> dict[str, xr.DataArray]: ...
 
     def to_xarray_dataset(
         self,
@@ -275,49 +230,41 @@ class DataSetProtocol(Protocol):
         start: int | None = None,
         end: int | None = None,
         use_multi_index: Literal["auto", "always", "never"] = "auto",
-    ) -> xr.Dataset:
-        ...
+    ) -> xr.Dataset: ...
 
     def to_pandas_dataframe_dict(
         self,
         *params: str | ParamSpec | ParameterBase,
         start: int | None = None,
         end: int | None = None,
-    ) -> dict[str, pd.DataFrame]:
-        ...
+    ) -> dict[str, pd.DataFrame]: ...
 
     def to_pandas_dataframe(
         self,
         *params: str | ParamSpec | ParameterBase,
         start: int | None = None,
         end: int | None = None,
-    ) -> pd.DataFrame:
-        ...
+    ) -> pd.DataFrame: ...
 
     # private members called by various other parts or the api
 
-    def _enqueue_results(self, result_dict: Mapping[ParamSpecBase, np.ndarray]) -> None:
-        ...
+    def _enqueue_results(
+        self, result_dict: Mapping[ParamSpecBase, np.ndarray]
+    ) -> None: ...
 
-    def _flush_data_to_database(self, block: bool = False) -> None:
-        ...
+    def _flush_data_to_database(self, block: bool = False) -> None: ...
 
     @property
-    def _parameters(self) -> str | None:
-        ...
+    def _parameters(self) -> str | None: ...
 
-    def _set_export_info(self, export_info: ExportInfo) -> None:
-        ...
+    def _set_export_info(self, export_info: ExportInfo) -> None: ...
 
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
-    def the_same_dataset_as(self, other: DataSetProtocol) -> bool:
-        ...
+    def the_same_dataset_as(self, other: DataSetProtocol) -> bool: ...
 
 
 class BaseDataSet(DataSetProtocol, Protocol):
-
     # shared methods between all implementations of the dataset
 
     def the_same_dataset_as(self, other: DataSetProtocol) -> bool:
@@ -330,6 +277,7 @@ class BaseDataSet(DataSetProtocol, Protocol):
 
         Args:
             other: the dataset to compare self to
+
         """
         if not isinstance(other, DataSetProtocol):
             return False
@@ -376,10 +324,12 @@ class BaseDataSet(DataSetProtocol, Protocol):
                 defaults to a value set in qcodes config
             path: Export path, defaults to value set in config
             prefix: File prefix, e.g. ``qcodes_``, defaults to value set in config.
+            automatic_export: Is this export automatic?
 
         Raises:
             ValueError: If the export data type is not specified or unknown,
                 raise an error
+
         """
         if isinstance(path, str):
             path = Path(path)
@@ -431,9 +381,11 @@ class BaseDataSet(DataSetProtocol, Protocol):
             export_type: Data export type, e.g. DataExportType.NETCDF
             path: Export path, defaults to value set in config
             prefix: File prefix, e.g. "qcodes_", defaults to value set in config.
+            automatic_export: Is this export automatic?
 
         Returns:
             str: Path file was saved to, returns None if no file was saved.
+
         """
         # Set defaults to values in config if the value was not set
         # (defaults to None)
@@ -582,6 +534,5 @@ class BaseDataSet(DataSetProtocol, Protocol):
 
 
 class DataSetType(str, Enum):
-
     DataSet = "DataSet"
     DataSetInMem = "DataSetInMem"

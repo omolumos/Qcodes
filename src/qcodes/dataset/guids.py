@@ -4,13 +4,16 @@ import random
 import re
 import time
 import warnings
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import qcodes as qc
 
-_guid_pattern = re.compile(r'^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$')
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+_guid_pattern = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$")
 
 
 def generate_guid(timeint: int | None = None, sampleint: int | None = None) -> str:
@@ -27,11 +30,12 @@ def generate_guid(timeint: int | None = None, sampleint: int | None = None) -> s
     Args:
         timeint: An integer of miliseconds since unix epoch time
         sampleint: A code for the sample
+
     """
     cfg = qc.config
 
     try:
-        guid_comp = cfg['GUID_components']
+        guid_comp = cfg["GUID_components"]
     except KeyError as err:
         raise RuntimeError(
             "Invalid QCoDeS config file! No GUID_components "
@@ -43,14 +47,14 @@ def generate_guid(timeint: int | None = None, sampleint: int | None = None) -> s
         raise RuntimeError(
             "Invalid QCoDeS config file! No GUID_type specified. Can not proceed."
         ) from err
-    location = guid_comp['location']
-    station = guid_comp['work_station']
+    location = guid_comp["location"]
+    station = guid_comp["work_station"]
 
     if timeint is None:
         # ms resolution, checked on Windows
-        timeint = int(np.round(time.time()*1000))
+        timeint = int(np.round(time.time() * 1000))
     if sampleint is None:
-        sampleint = guid_comp['sample']
+        sampleint = guid_comp["sample"]
 
     default_sample_ids = (0, 0xAA_AAA_AAA)
 
@@ -80,8 +84,10 @@ def generate_guid(timeint: int | None = None, sampleint: int | None = None) -> s
     stat_str = f"{station:06x}"
     time_str = f"{timeint:016x}"
 
-    guid = (f'{smpl_str}-{loc_str}{stat_str[:2]}-{stat_str[2:]}-'
-            f'{time_str[:4]}-{time_str[4:]}')
+    guid = (
+        f"{smpl_str}-{loc_str}{stat_str[:2]}-{stat_str[2:]}-"
+        f"{time_str[:4]}-{time_str[4:]}"
+    )
 
     return guid
 
@@ -96,13 +102,14 @@ def parse_guid(guid: str) -> dict[str, int]:
     Returns:
         A dict with keys 'location', 'work_station', 'sample', and 'time'
           as integer values
+
     """
-    guid = guid.replace('-', '')
+    guid = guid.replace("-", "")
     components = {}
-    components['sample'] = int(guid[:8], base=16)
-    components['location'] = int(guid[8:10], base=16)
-    components['work_station'] = int(guid[10:16], base=16)
-    components['time'] = int(guid[16:], base=16)
+    components["sample"] = int(guid[:8], base=16)
+    components["location"] = int(guid[8:10], base=16)
+    components["work_station"] = int(guid[10:16], base=16)
+    components["time"] = int(guid[16:], base=16)
 
     return components
 
@@ -117,6 +124,7 @@ def build_guid_from_components(components: dict[str, int]) -> str:
 
     Returns:
         A valid guid string
+
     """
     work_station_hex = f'{components["work_station"]:06x}'
 
@@ -136,23 +144,27 @@ def set_guid_location_code() -> None:
     Interactive function to set the location code.
     """
     cfg = qc.config
-    old_loc = cfg['GUID_components']['location']
-    print(f'Updating GUID location code. Current location code is: {old_loc}')
+    old_loc = cfg["GUID_components"]["location"]
+    print(f"Updating GUID location code. Current location code is: {old_loc}")
     if old_loc != 0:
-        print('That is a non-default location code. Perhaps you should not '
-              'change it? Re-enter that code to leave it unchanged.')
-    loc_str = input('Please enter the new location code (1-256): ')
+        print(
+            "That is a non-default location code. Perhaps you should not "
+            "change it? Re-enter that code to leave it unchanged."
+        )
+    loc_str = input("Please enter the new location code (1-256): ")
     try:
         location = int(loc_str)
     except ValueError:
-        print('The location code must be an integer. No update performed.')
+        print("The location code must be an integer. No update performed.")
         return
-    if not(257 > location > 0):
-        print('The location code must be between 1 and 256 (both included). '
-              'No update performed')
+    if not (257 > location > 0):
+        print(
+            "The location code must be between 1 and 256 (both included). "
+            "No update performed"
+        )
         return
 
-    cfg['GUID_components']['location'] = location
+    cfg["GUID_components"]["location"] = location
     cfg.save_to_home()
 
 
@@ -161,24 +173,27 @@ def set_guid_work_station_code() -> None:
     Interactive function to set the work station code
     """
     cfg = qc.config
-    old_ws = cfg['GUID_components']['work_station']
-    print('Updating GUID work station code. '
-          f'Current work station code is: {old_ws}')
+    old_ws = cfg["GUID_components"]["work_station"]
+    print(f"Updating GUID work station code. Current work station code is: {old_ws}")
     if old_ws != 0:
-        print('That is a non-default work station code. Perhaps you should not'
-              ' change it? Re-enter that code to leave it unchanged.')
-    ws_str = input('Please enter the new work station code (1-16777216): ')
+        print(
+            "That is a non-default work station code. Perhaps you should not"
+            " change it? Re-enter that code to leave it unchanged."
+        )
+    ws_str = input("Please enter the new work station code (1-16777216): ")
     try:
         work_station = int(ws_str)
     except ValueError:
-        print('The work station code must be an integer. No update performed.')
+        print("The work station code must be an integer. No update performed.")
         return
-    if not(16777216 > work_station > 0):
-        print('The work staion code must be between 1 and 256 (both included).'
-              ' No update performed')
+    if not (16777216 > work_station > 0):
+        print(
+            "The work staion code must be between 1 and 256 (both included)."
+            " No update performed"
+        )
         return
 
-    cfg['GUID_components']['work_station'] = work_station
+    cfg["GUID_components"]["work_station"] = work_station
     cfg.save_to_home()
 
 
@@ -199,19 +214,20 @@ def filter_guids_by_parts(
 
     Returns:
         A list of GUIDs that matches the supplied parts.
+
     """
     matched_guids = []
     for guid in guids:
         guid_dict = parse_guid(guid)
         match = True
         if sample_id is not None:
-            if guid_dict['sample'] != sample_id:
+            if guid_dict["sample"] != sample_id:
                 match = False
         if location is not None:
-            if guid_dict['location'] != location:
+            if guid_dict["location"] != location:
                 match = False
         if work_station is not None:
-            if guid_dict['work_station'] != work_station:
+            if guid_dict["work_station"] != work_station:
                 match = False
 
         if match:
@@ -228,4 +244,4 @@ def validate_guid_format(guid: str) -> None:
     if _guid_pattern.match(guid):
         return
     else:
-        raise ValueError(f'Did not receive a valid guid. Got {guid}')
+        raise ValueError(f"Did not receive a valid guid. Got {guid}")

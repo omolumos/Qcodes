@@ -1,21 +1,22 @@
 """Instrument base class."""
+
 from __future__ import annotations
 
 import logging
 import time
 import weakref
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
 
 from qcodes.utils import strip_attrs
 from qcodes.validators import Anything
 
-from .instrument_base import InstrumentBase
+from .instrument_base import InstrumentBase, InstrumentBaseKWArgs
 from .instrument_meta import InstrumentMeta
 
 if TYPE_CHECKING:
-    from qcodes.logger.instrument_logger import InstrumentLoggerAdapter
+    from typing_extensions import Unpack
 
+    from qcodes.logger.instrument_logger import InstrumentLoggerAdapter
 
 log = logging.getLogger(__name__)
 
@@ -25,18 +26,26 @@ class InstrumentProtocol(Protocol):
 
     log: InstrumentLoggerAdapter  # instrument logging
 
-    def ask(self, cmd: str) -> str:
-        ...
+    def ask(self, cmd: str) -> str: ...
 
-    def write(self, cmd: str) -> None:
-        ...
+    def write(self, cmd: str) -> None: ...
 
 
 T = TypeVar("T", bound="Instrument")
 
+# a metaclass that overrides __call__ means that we lose
+# both the args and return type hints.
+# Since our metaclass does not modify the signature
+# is is safe simply not to use that metaclass in typechecking context.
+# See https://github.com/microsoft/pyright/discussions/5561 and
+# https://github.com/microsoft/pyright/issues/5488
+if TYPE_CHECKING:
+    instrument_meta_class = type
+else:
+    instrument_meta_class = InstrumentMeta
 
-class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
+class Instrument(InstrumentBase, metaclass=instrument_meta_class):
     """
     Base class for all QCodes instruments.
 
@@ -47,24 +56,19 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
             instrument's JSON snapshot.
         label: nicely formatted name of the instrument; if None, the
             ``name`` is used.
+
     """
 
-    _all_instruments: weakref.WeakValueDictionary[
-        str, Instrument
-    ] = weakref.WeakValueDictionary()
-    _type = None
+    _all_instruments: weakref.WeakValueDictionary[str, Instrument] = (
+        weakref.WeakValueDictionary()
+    )
+    _type: type[Instrument] | None = None
     _instances: weakref.WeakSet[Instrument] = weakref.WeakSet()
 
-    def __init__(
-        self,
-        name: str,
-        metadata: Mapping[Any, Any] | None = None,
-        label: str | None = None,
-    ) -> None:
-
+    def __init__(self, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]) -> None:
         self._t0 = time.time()
 
-        super().__init__(name=name, metadata=metadata, label=label)
+        super().__init__(name=name, **kwargs)
 
         self.add_parameter("IDN", get_cmd=self.get_idn, vals=Anything())
 
@@ -84,6 +88,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Returns:
             A dict containing vendor, model, serial, and firmware.
+
         """
         idstr = ""  # in case self.ask fails
         try:
@@ -122,11 +127,12 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
                 Default ``IDN``.
             begin_time: ``time.time()`` when init started.
                 Default is ``self._t0``, set at start of ``Instrument.__init__``.
+
         """
         # start with an empty dict, just in case an instrument doesn't
         # heed our request to return all 4 fields.
         idn = {"vendor": None, "model": None, "serial": None, "firmware": None}
-        idn.update(self.get(idn_param))
+        idn.update(self.parameters[idn_param].get())
         t = time.time() - (begin_time or self._t0)
 
         con_msg = (
@@ -182,6 +188,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Examples:
             >>> atexit.register(qc.Instrument.close_all())
+
         """
         log.info("Closing all registered instruments")
         for inststr in list(cls._all_instruments):
@@ -207,6 +214,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Raises:
             KeyError: If another instance with the same name is already present.
+
         """
         name = instance.name
         # First insert this instrument in the record of *all* instruments
@@ -234,6 +242,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Returns:
             A list of instances.
+
         """
         if getattr(cls, "_type", None) is not cls:
             # only instances of a superclass - we want instances of this
@@ -248,6 +257,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Args:
             instance: The instance to remove
+
         """
         if instance in getattr(cls, "_instances", weakref.WeakSet()):
             cls._instances.remove(instance)
@@ -261,13 +271,13 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
     @overload
     @classmethod
-    def find_instrument(cls, name: str, instrument_class: None = None) -> Instrument:
-        ...
+    def find_instrument(
+        cls, name: str, instrument_class: None = None
+    ) -> Instrument: ...
 
     @overload
     @classmethod
-    def find_instrument(cls, name: str, instrument_class: type[T]) -> T:
-        ...
+    def find_instrument(cls, name: str, instrument_class: type[T]) -> T: ...
 
     @classmethod
     def find_instrument(
@@ -288,6 +298,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
                 reference is invalid (dead).
             TypeError: If a specific class was requested but a different
                 type was found.
+
         """
         internal_instrument_class = instrument_class or Instrument
 
@@ -315,6 +326,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
         Args:
             name: Name of the instrument.
             instrument_class: The type of instrument you are looking for.
+
         """
         instrument_exists = True
 
@@ -341,6 +353,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Args:
             instr_instance: Instance of an Instrument class or its subclass.
+
         """
         if (
             isinstance(instr_instance, Instrument)
@@ -371,6 +384,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
         Raises:
             Exception: Wraps any underlying exception with extra context,
                 including the command and the instrument.
+
         """
         try:
             self.write_raw(cmd)
@@ -389,6 +403,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Args:
             cmd: The string to send to the instrument.
+
         """
         raise NotImplementedError(
             f"Instrument {type(self).__name__} has not defined a write method"
@@ -411,6 +426,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
         Raises:
             Exception: Wraps any underlying exception with extra context,
                 including the command and the instrument.
+
         """
         try:
             answer = self.ask_raw(cmd)
@@ -432,6 +448,7 @@ class Instrument(InstrumentBase, metaclass=InstrumentMeta):
 
         Args:
             cmd: The string to send to the instrument.
+
         """
         raise NotImplementedError(
             f"Instrument {type(self).__name__} has not defined an ask method"
@@ -463,10 +480,13 @@ def find_or_create_instrument(
     Args:
         instrument_class: Class of the instrument to find or create.
         name: Name of the instrument to find or create.
+        *args: Positional arguments passed to the instrument class.
         recreate: When ``True``, the instruments gets recreated if it is found.
+        **kwargs: Keyword arguments passed to the instrument class.
 
     Returns:
         The found or created instrument.
+
     """
     if not Instrument.exist(name, instrument_class=instrument_class):
         instrument = instrument_class(name, *args, **kwargs)

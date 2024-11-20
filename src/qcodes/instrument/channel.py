@@ -1,9 +1,10 @@
-""" Base class for the channel of an instrument """
+"""Base class for the channel of an instrument"""
+
 from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Iterable, Iterator, MutableSequence, Sequence
-from typing import Any, TypeVar, Union, cast, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from qcodes.metadatable import MetadatableWithName
 from qcodes.parameters import (
@@ -16,8 +17,13 @@ from qcodes.parameters.multi_channel_instrument_parameter import InstrumentModul
 from qcodes.utils import full_class
 from qcodes.validators import Validator
 
-from .instrument import Instrument
 from .instrument_base import InstrumentBase
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+    from .instrument import Instrument
+    from .instrument_base import InstrumentBaseKWArgs
 
 
 class InstrumentModule(InstrumentBase):
@@ -31,15 +37,14 @@ class InstrumentModule(InstrumentBase):
     Args:
         parent: The instrument to which this module should be
           attached.
-
         name: The name of this module.
+        **kwargs: Forwarded to the base class.
 
     """
 
-    def __init__(self,
-                 parent: InstrumentBase,
-                 name: str,
-                 **kwargs: Any) -> None:
+    def __init__(
+        self, parent: InstrumentBase, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]
+    ) -> None:
         # need to specify parent before `super().__init__` so that the right
         # `full_name` is available in that scope. `full_name` is used for
         # registering the filter for the log messages. It is composed by
@@ -174,8 +179,9 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
             self._channels = []
         else:
             self._channels = list(chan_list)
-            self._channel_mapping = {channel.short_name: channel
-                                     for channel in self._channels}
+            self._channel_mapping = {
+                channel.short_name: channel for channel in self._channels
+            }
             if not all(isinstance(chan, chan_type) for chan in self._channels):
                 raise TypeError(
                     f"All items in this ChannelTuple must be of "
@@ -183,12 +189,10 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
                 )
 
     @overload
-    def __getitem__(self, i: int) -> InstrumentModuleType:
-        ...
+    def __getitem__(self, i: int) -> InstrumentModuleType: ...
 
     @overload
-    def __getitem__(self: T, i: slice | tuple[int, ...]) -> T:
-        ...
+    def __getitem__(self: T, i: slice | tuple[int, ...]) -> T: ...
 
     def __getitem__(
         self: T, i: int | slice | tuple[int, ...]
@@ -200,6 +204,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
         Args:
             i: Either a single channel index or a slice of channels
               to get
+
         """
         if isinstance(i, slice):
             return type(self)(
@@ -248,6 +253,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
 
         Args:
             other: Right argument to add.
+
         """
         if not isinstance(self, ChannelTuple) or not isinstance(other, ChannelTuple):
             raise TypeError(
@@ -262,8 +268,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
                 f"{self._chan_type.__name__} and {other._chan_type.__name__}."
             )
         if self._parent != other._parent:
-            raise ValueError("Can only add channels from the same parent "
-                             "together.")
+            raise ValueError("Can only add channels from the same parent together.")
 
         return type(self)(
             self._parent,
@@ -301,8 +306,13 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
         name_parts.append(self.short_name)
         return name_parts
 
-    def index(
-        self, obj: InstrumentModuleType, start: int = 0, stop: int = sys.maxsize
+    # the parameter obj should be called value but that would
+    # be an incompatible change
+    def index(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        obj: InstrumentModuleType,
+        start: int = 0,
+        stop: int = sys.maxsize,
     ) -> int:
         """
         Return the index of the given object
@@ -311,14 +321,18 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
             obj: The object to find in the channel list.
             start: Index to start searching from.
             stop: Index to stop searching at.
+
         """
         return self._channels.index(obj, start, stop)
 
-    def count(self, obj: InstrumentModuleType) -> int:
+    def count(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self, obj: InstrumentModuleType
+    ) -> int:
         """Returns number of instances of the given object in the list
 
         Args:
             obj: The object to find in the ChannelTuple.
+
         """
         return self._channels.count(obj)
 
@@ -328,6 +342,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
 
         Args:
             *names: channel names
+
         """
         if len(names) == 0:
             raise Exception("one or more names must be given")
@@ -374,22 +389,26 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
 
         Returns:
             dict: base snapshot
+
         """
         if self._snapshotable:
-            snap = {'channels': {chan.name: chan.snapshot(update=update)
-                                     for chan in self._channels},
-                    'snapshotable': self._snapshotable,
-                    '__class__': full_class(self),
-                    }
+            snap = {
+                "channels": {
+                    chan.name: chan.snapshot(update=update) for chan in self._channels
+                },
+                "snapshotable": self._snapshotable,
+                "__class__": full_class(self),
+            }
         else:
-            snap = {'snapshotable': self._snapshotable,
-                    '__class__': full_class(self),
-                    }
+            snap = {
+                "snapshotable": self._snapshotable,
+                "__class__": full_class(self),
+            }
         return snap
 
     def __getattr__(
         self, name: str
-    ) -> (MultiChannelInstrumentParameter | Callable[..., None] | InstrumentModuleType):
+    ) -> MultiChannelInstrumentParameter | Callable[..., None] | InstrumentModuleType:
         """
         Look up an attribute by name. If this is the name of a parameter or
         a function on the channel type contained in this container return a
@@ -400,6 +419,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
         Args:
             name: The name of the parameter, function or channel that we want to
                 operate on.
+
         """
         if len(self) > 0:
             # Check if this is a valid parameter
@@ -450,7 +470,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
                 "Slicing is currently not supported for MultiParameters"
             )
         parameters = cast(
-            list[Union[Parameter, ArrayParameter]],
+            list[Parameter | ArrayParameter],
             [chan.parameters[name] for chan in self._channels],
         )
         names = tuple(f"{chan.name}_{name}" for chan in self._channels)
@@ -500,12 +520,12 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
             names += [channel.short_name for channel in self._channels]
         return sorted(set(names))
 
-    def print_readable_snapshot(self, update: bool = False,
-                                max_chars: int = 80) -> None:
+    def print_readable_snapshot(
+        self, update: bool = False, max_chars: int = 80
+    ) -> None:
         if self._snapshotable:
             for channel in self._channels:
-                channel.print_readable_snapshot(update=update,
-                                                max_chars=max_chars)
+                channel.print_readable_snapshot(update=update, max_chars=max_chars)
 
     def invalidate_cache(self) -> None:
         """
@@ -513,6 +533,7 @@ class ChannelTuple(MetadatableWithName, Sequence[InstrumentModuleType]):
         """
         for chan in self._channels:
             chan.invalidate_cache()
+
 
 # we ignore a mypy error here since the __getitem__ signature above
 # taking a tuple is not compatible with MutableSequence
@@ -583,12 +604,10 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
             self._locked = False
 
     @overload
-    def __delitem__(self, key: int) -> None:
-        ...
+    def __delitem__(self, key: int) -> None: ...
 
     @overload
-    def __delitem__(self, key: slice) -> None:
-        ...
+    def __delitem__(self, key: slice) -> None: ...
 
     def __delitem__(self, key: int | slice) -> None:
         if self._locked:
@@ -599,12 +618,12 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
         }
 
     @overload
-    def __setitem__(self, index: int, value: InstrumentModuleType) -> None:
-        ...
+    def __setitem__(self, index: int, value: InstrumentModuleType) -> None: ...
 
     @overload
-    def __setitem__(self, index: slice, value: Iterable[InstrumentModuleType]) -> None:
-        ...
+    def __setitem__(
+        self, index: slice, value: Iterable[InstrumentModuleType]
+    ) -> None: ...
 
     def __setitem__(
         self,
@@ -625,13 +644,16 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
             channel.short_name: channel for channel in self._channels
         }
 
-    def append(self, obj: InstrumentModuleType) -> None:
+    def append(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self, obj: InstrumentModuleType
+    ) -> None:
         """
         Append a Channel to this list. Requires that the ChannelList is not
         locked and that the channel is of the same type as the ones in the list.
 
         Args:
             obj: New channel to add to the list.
+
         """
         if self._locked:
             raise AttributeError("Cannot append to a locked channel list")
@@ -654,12 +676,15 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
         self._channels.clear()
         self._channel_mapping.clear()
 
-    def remove(self, obj: InstrumentModuleType) -> None:
+    def remove(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self, obj: InstrumentModuleType
+    ) -> None:
         """
         Removes obj from ChannelList if not locked.
 
         Args:
             obj: Channel to remove from the list.
+
         """
         if self._locked:
             raise AttributeError("Cannot remove from a locked channel list")
@@ -667,13 +692,16 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
             self._channels.remove(obj)
             self._channel_mapping.pop(obj.short_name)
 
-    def extend(self, objects: Iterable[InstrumentModuleType]) -> None:
+    def extend(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self, objects: Iterable[InstrumentModuleType]
+    ) -> None:
         """
         Insert an iterable of objects into the list of channels.
 
         Args:
             objects: A list of objects to add into the
               :class:`ChannelList`.
+
         """
         # objects may be a generator but we need to iterate over it twice
         # below so copy it into a tuple just in case.
@@ -685,13 +713,16 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
         self._channels.extend(objects_tuple)
         self._channel_mapping.update({obj.short_name: obj for obj in objects_tuple})
 
-    def insert(self, index: int, obj: InstrumentModuleType) -> None:
+    def insert(  #  pyright: ignore[reportIncompatibleMethodOverride]
+        self, index: int, obj: InstrumentModuleType
+    ) -> None:
         """
         Insert an object into the ChannelList at a specific index.
 
         Args:
             index: Index to insert object.
             obj: Object of type chan_type to insert.
+
         """
         if self._locked:
             raise AttributeError("Cannot insert into a locked channel list")
@@ -710,6 +741,7 @@ class ChannelList(ChannelTuple, MutableSequence[InstrumentModuleType]):  # type:
 
         Raises:
             AttributeError: If the ChannelList is not locked.
+
         """
         if not self._locked:
             raise AttributeError(
@@ -761,6 +793,7 @@ class ChannelTupleValidator(Validator[InstrumentChannel]):
         channel_list: the ChannelTuple that should be checked
             against. The channel list must be locked and populated before it
             can be used to construct a validator.
+
     """
 
     def __init__(self, channel_list: ChannelTuple) -> None:
@@ -778,7 +811,7 @@ class ChannelTupleValidator(Validator[InstrumentChannel]):
             )
         self._channel_list = channel_list
 
-    def validate(self, value: InstrumentChannel, context: str = '') -> None:
+    def validate(self, value: InstrumentChannel, context: str = "") -> None:
         """
         Checks to see that value is a member of the ChannelTuple referenced by
         this validator
@@ -788,6 +821,7 @@ class ChannelTupleValidator(Validator[InstrumentChannel]):
                 reference channel list.
             context: the context of the call, used as part of the exception
                 raised.
+
         """
         if value not in self._channel_list:
             raise ValueError(
@@ -797,6 +831,7 @@ class ChannelTupleValidator(Validator[InstrumentChannel]):
 
 class ChannelListValidator(ChannelTupleValidator):
     """Alias for backwards compatibility. Do not use"""
+
     pass
 
 
@@ -830,14 +865,12 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
         Returns:
             List of instrument channel instances created for channels
             that already exist on the instrument
+
         """
 
         obj_list = []
         for new_kwargs in cls._discover_from_instrument(parent, **kwargs):
-            obj = cls(
-                parent, existence=True, channel_list=channel_list,
-                **new_kwargs
-            )
+            obj = cls(parent, existence=True, channel_list=channel_list, **new_kwargs)
             obj_list.append(obj)
 
         return obj_list
@@ -858,9 +891,11 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
         Returns:
               List of keyword arguments for channel instance initialization
               for each channel that already exists on the physical instrument
+
         """
         raise NotImplementedError(
-            "Please subclass and implement this method in the subclass")
+            "Please subclass and implement this method in the subclass"
+        )
 
     @classmethod
     def new_instance(
@@ -883,6 +918,7 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
             channel_list: The channel list this
                 channel is going to belong to
             **kwargs: Keyword arguments needed to create a new instance.
+
         """
         new_kwargs = cls._get_new_instance_kwargs(parent=parent, **kwargs)
 
@@ -906,7 +942,8 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
             # arguments are supplied
             raise TypeError(
                 "Probably, the '_get_new_instance_kwargs' method does not "
-                "return all of the required keyword arguments") from err
+                "return all of the required keyword arguments"
+            ) from err
 
         if create_on_instrument:
             new_instance.create()
@@ -939,9 +976,11 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
             added by the ``new_instance`` method and should not be added in the
             kwarg dictionary returned here. Additionally, the argument
             ``existence`` either needs to be omitted or be False.
+
         """
         raise NotImplementedError(
-            "Please subclass and implement this method in the subclass")
+            "Please subclass and implement this method in the subclass"
+        )
 
     def __init__(
         self,
@@ -965,6 +1004,8 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
             channel_list: Reference to the list that this channel is a member
                 of; this is used when deleting the channel so that it can remove
                 itself from the list
+            **kwargs: Keyword passed to the super class.
+
         """
         super().__init__(parent, name=name, **kwargs)
         self._exists_on_instrument = exists_on_instrument
@@ -1005,8 +1046,7 @@ class AutoLoadableInstrumentChannel(InstrumentChannel):
 
     def _assert_existence(self) -> None:
         if not self._exists_on_instrument:
-            raise RuntimeError(
-                "Object does not exist (anymore) on the instrument")
+            raise RuntimeError("Object does not exist (anymore) on the instrument")
 
     def write(self, cmd: str) -> None:
         """
@@ -1066,7 +1106,9 @@ class AutoLoadableChannelList(ChannelList):
         ValueError: If ``multichan_paramclass`` is not a subclass of
             :class:`MultiChannelInstrumentParameter` (note that a class is a
             subclass of itself).
+
     """
+
     def __init__(
         self,
         parent: Instrument,
@@ -1077,13 +1119,12 @@ class AutoLoadableChannelList(ChannelList):
         multichan_paramclass: type = MultiChannelInstrumentParameter,
         **kwargs: Any,
     ) -> None:
-
         super().__init__(
-            parent, name, chan_type, chan_list, snapshotable,
-            multichan_paramclass
+            parent, name, chan_type, chan_list, snapshotable, multichan_paramclass
         )
         new_channels = self._chan_type.load_from_instrument(  # type: ignore[attr-defined]
-            self._parent, channel_list=self, **kwargs)
+            self._parent, channel_list=self, **kwargs
+        )
 
         self.extend(new_channels)
 
@@ -1097,12 +1138,10 @@ class AutoLoadableChannelList(ChannelList):
 
         Returns:
             Newly created instance of the channel class
+
         """
         new_channel = self._chan_type.new_instance(  # type: ignore[attr-defined]
-            self._parent,
-            create_on_instrument=True,
-            channel_list=self,
-            **kwargs
+            self._parent, create_on_instrument=True, channel_list=self, **kwargs
         )
 
         self.append(new_channel)

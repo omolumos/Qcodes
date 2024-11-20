@@ -3,17 +3,20 @@ This module provides a wrapper class :class:`ConnectionPlus` around
 :class:`sqlite3.Connection` together with functions around it which allow
 performing nested atomic transactions on an SQLite database.
 """
+
 from __future__ import annotations
 
 import logging
-import sqlite3
-from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import wrapt  # type: ignore[import-untyped]
 
 from qcodes.utils import DelayedKeyboardInterrupt
+
+if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Iterator
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ class ConnectionPlus(wrapt.ObjectProxy):
     It is recommended to create a ConnectionPlus using the function :func:`connect`
 
     """
+
     atomic_in_progress: bool = False
     """
     a bool describing whether the connection is
@@ -45,8 +49,10 @@ class ConnectionPlus(wrapt.ObjectProxy):
         super().__init__(sqlite3_connection)
 
         if isinstance(sqlite3_connection, ConnectionPlus):
-            raise ValueError('Attempted to create `ConnectionPlus` from a '
-                             '`ConnectionPlus` object which is not allowed.')
+            raise ValueError(
+                "Attempted to create `ConnectionPlus` from a "
+                "`ConnectionPlus` object which is not allowed."
+            )
 
         self.path_to_dbfile = path_to_dbfile(sqlite3_connection)
 
@@ -65,6 +71,7 @@ def make_connection_plus_from(
 
     Returns:
         the "same" connection but as ConnectionPlus object
+
     """
     if not isinstance(conn, ConnectionPlus):
         conn_plus = ConnectionPlus(conn)
@@ -87,19 +94,24 @@ def atomic(conn: ConnectionPlus) -> Iterator[ConnectionPlus]:
 
     Args:
         conn: connection to guard
-    """
-    with DelayedKeyboardInterrupt():
-        if not isinstance(conn, ConnectionPlus):
-            raise ValueError('atomic context manager only accepts '
-                             'ConnectionPlus database connection objects.')
 
-        is_outmost = not(conn.atomic_in_progress)
+    """
+    with DelayedKeyboardInterrupt(context={"reason": "sqlite atomic operation"}):
+        if not isinstance(conn, ConnectionPlus):
+            raise ValueError(
+                "atomic context manager only accepts "
+                "ConnectionPlus database connection objects."
+            )
+
+        is_outmost = not (conn.atomic_in_progress)
 
         if conn.in_transaction and is_outmost:
-            raise RuntimeError('SQLite connection has uncommitted '
-                               'transactions. '
-                               'Please commit those before starting an atomic '
-                               'transaction.')
+            raise RuntimeError(
+                "SQLite connection has uncommitted "
+                "transactions. "
+                "Please commit those before starting an atomic "
+                "transaction."
+            )
 
         old_atomic_in_progress = conn.atomic_in_progress
         conn.atomic_in_progress = True
@@ -108,7 +120,7 @@ def atomic(conn: ConnectionPlus) -> Iterator[ConnectionPlus]:
         try:
             if is_outmost:
                 conn.isolation_level = None
-                conn.cursor().execute('BEGIN')
+                conn.cursor().execute("BEGIN")
             yield conn
         except Exception as e:
             conn.rollback()
@@ -123,8 +135,7 @@ def atomic(conn: ConnectionPlus) -> Iterator[ConnectionPlus]:
             conn.atomic_in_progress = old_atomic_in_progress
 
 
-def transaction(conn: ConnectionPlus,
-                sql: str, *args: Any) -> sqlite3.Cursor:
+def transaction(conn: ConnectionPlus, sql: str, *args: Any) -> sqlite3.Cursor:
     """Perform a transaction.
     The transaction needs to be committed or rolled back.
 
@@ -146,8 +157,7 @@ def transaction(conn: ConnectionPlus,
     return c
 
 
-def atomic_transaction(conn: ConnectionPlus,
-                       sql: str, *args: Any) -> sqlite3.Cursor:
+def atomic_transaction(conn: ConnectionPlus, sql: str, *args: Any) -> sqlite3.Cursor:
     """Perform an **atomic** transaction.
     The transaction is committed if there are no exceptions else the
     transaction is rolled back.

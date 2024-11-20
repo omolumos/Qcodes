@@ -2,15 +2,18 @@
 A helper module containing a class to keep track of vectors in different
 coordinate systems.
 """
+
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, TypeVar, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 AllCoordsType = tuple[float, float, float, float, float, float, float]
-NormOrder = Union[None, float, Literal["fro"], Literal["nuc"]]
+NormOrder = None | float | Literal["fro"] | Literal["nuc"]
 T = TypeVar("T", bound="FieldVector")
 
 
@@ -52,6 +55,7 @@ class FieldVector:
                 of the vector on to the xy-plane
             phi: represents the angle of rho
                 with respect to the positive x-axis
+
         """
 
         self._x = float(x) if x is not None else None
@@ -95,10 +99,19 @@ class FieldVector:
         if x is None or y is None or z is None:
             return None
         phi = np.arctan2(y, x)
-        rho = np.sqrt(x ** 2 + y ** 2)
-        r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
+        rho = np.sqrt(x**2 + y**2)
+        r = np.sqrt(x**2 + y**2 + z**2)
         if r != 0:
-            theta = np.arccos(z / r)
+            z_r_frac = z / r
+            # it it possible that z_r_frac is slightly larger than 1 or
+            # slightly smaller than -1 due to floating point errors.
+            # an example that triggers this is:
+            # x=0, y=0, z=3.729170476738041e-155
+            if z_r_frac > 1:
+                z_r_frac = 1
+            elif z_r_frac < -1:
+                z_r_frac = -1
+            theta = np.arccos(z_r_frac)
         else:
             theta = 0
 
@@ -114,7 +127,7 @@ class FieldVector:
         z = r * np.cos(theta)
         x = r * np.sin(theta) * np.cos(phi)
         y = r * np.sin(theta) * np.sin(phi)
-        rho = np.sqrt(x ** 2 + y ** 2)
+        rho = np.sqrt(x**2 + y**2)
 
         return x, y, z, r, theta, phi, rho
 
@@ -127,9 +140,18 @@ class FieldVector:
             return None
         x = rho * np.cos(phi)
         y = rho * np.sin(phi)
-        r = np.sqrt(rho ** 2 + z ** 2)
+        r = np.sqrt(rho**2 + z**2)
         if r != 0:
-            theta = np.arccos(z / r)
+            z_r_frac = z / r
+            # it it possible that z_r_frac is slightly larger than 1 or
+            # slightly smaller than -1 due to floating point errors.
+            # an example that triggers this is:
+            # phi=0, rho=0, z=3.729170476738041e-155
+            if z_r_frac > 1:
+                z_r_frac = 1
+            elif z_r_frac < -1:
+                z_r_frac = -1
+            theta = np.arccos(z_r_frac)
         else:
             theta = 0
 
@@ -146,10 +168,8 @@ class FieldVector:
         """
         for f in [
             lambda: FieldVector._cartesian_to_other(self._x, self._y, self._z),
-            lambda: FieldVector._spherical_to_other(self._r, self._theta,
-                                                    self._phi),
-            lambda: FieldVector._cylindrical_to_other(self._phi, self._rho,
-                                                      self._z)
+            lambda: FieldVector._spherical_to_other(self._r, self._theta, self._phi),
+            lambda: FieldVector._cylindrical_to_other(self._phi, self._rho, self._z),
         ]:
             new_values = f()
             if new_values is not None:  # this will return None if any of the
@@ -179,6 +199,7 @@ class FieldVector:
             # generality (and not worth it), so the following will raise the
             # above-mentioned ValueError too.
             >>> f.set_vector(x=9, y=0, r=3)
+
         """
         names = sorted(list(new_values.keys()))
         groups = [["x", "y", "z"], ["phi", "r", "theta"], ["phi", "rho", "z"]]
@@ -208,6 +229,7 @@ class FieldVector:
         Args:
             new_values (dict): Keys representing parameter names and values the
                 values to be set.
+
         """
         if len(new_values) > 1:
             raise NotImplementedError("Cannot set multiple components at once")
@@ -227,7 +249,6 @@ class FieldVector:
 
         for group in groups:
             if component_name in group:
-
                 for att in FieldVector.attributes:
                     if att not in group:
                         setattr(self, "_" + att, None)
@@ -246,9 +267,9 @@ class FieldVector:
             else:
                 return value
 
-        components = [convert_angle_to_degrees(
-            name, getattr(self, "_" + name)
-        ) for name in names]
+        components = [
+            convert_angle_to_degrees(name, getattr(self, "_" + name)) for name in names
+        ]
 
         return components
 
@@ -274,10 +295,9 @@ class FieldVector:
         if not isinstance(other, (float, int)):
             return NotImplemented
 
-        return FieldVector(**{
-            component: self[component] * other
-            for component in 'xyz'
-        })
+        return FieldVector(
+            **{component: self[component] * other for component in "xyz"}
+        )
 
     def __rmul__(self, other: Any) -> FieldVector:
         if not isinstance(other, (int, float)):
@@ -298,19 +318,17 @@ class FieldVector:
         if not isinstance(other, FieldVector):
             return NotImplemented
 
-        return FieldVector(**{
-            component: self[component] + other[component]
-            for component in 'xyz'
-        })
+        return FieldVector(
+            **{component: self[component] + other[component] for component in "xyz"}
+        )
 
     def __sub__(self, other: Any) -> FieldVector:
         if not isinstance(other, FieldVector):
             return NotImplemented
 
-        return FieldVector(**{
-            component: self[component] - other[component]
-            for component in 'xyz'
-        })
+        return FieldVector(
+            **{component: self[component] - other[component] for component in "xyz"}
+        )
 
     def norm(self, ord: NormOrder = 2) -> float:
         """
@@ -401,6 +419,4 @@ class FieldVector:
         # w * [x, y, z, s] == [x, y, z, s].
         # Thus, we start by rescaling such that s == 1.
         hvec /= hvec[-1]
-        return cls(
-            x=hvec[0], y=hvec[1], z=hvec[2]
-        )
+        return cls(x=hvec[0], y=hvec[1], z=hvec[2])

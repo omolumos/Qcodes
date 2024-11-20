@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
@@ -20,7 +19,6 @@ from qcodes.dataset.dond.do_nd_utils import (
     _set_write_period,
     catch_interrupts,
 )
-from qcodes.dataset.experiment_container import Experiment
 from qcodes.dataset.measurements import Measurement
 from qcodes.dataset.threading import (
     SequentialParamsCaller,
@@ -33,6 +31,8 @@ LOG = logging.getLogger(__name__)
 TRACER = trace.get_tracer(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from qcodes.dataset.descriptions.versioning.rundescribertypes import Shapes
     from qcodes.dataset.dond.do_nd_utils import (
         ActionsT,
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         BreakConditionT,
         ParamMeasT,
     )
+    from qcodes.dataset.experiment_container import Experiment
 
 
 @TRACER.start_as_current_span("qcodes.dataset.do1d")
@@ -103,6 +104,7 @@ def do1d(
 
     Returns:
         The QCoDeS dataset.
+
     """
     if do_plot is None:
         do_plot = cast(bool, config.dataset.dond_plot)
@@ -149,7 +151,11 @@ def do1d(
     # do1D enforces a simple relationship between measured parameters
     # and set parameters. For anything more complicated this should be
     # reimplemented from scratch
-    with catch_interrupts() as interrupted, meas.run() as datasaver, param_meas_caller as call_param_meas:
+    with (
+        catch_interrupts() as interrupted,
+        meas.run() as datasaver,
+        param_meas_caller as call_param_meas,
+    ):
         dataset = datasaver.dataset
         additional_setpoints_data = process_params_meas(additional_setpoints)
         setpoints = np.linspace(start, stop, num_points)
