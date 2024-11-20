@@ -29,6 +29,25 @@ def _parse_output_string(string_value: str) -> str:
         s = conversions[s]
     return s
 
+def parse_current_from_response(response: str) -> float:
+    """
+    Extracts a floating-point value in scientific notation from a delimited string.
+
+    Args:
+        response: The response string from the instrument.
+
+    Returns:
+        The extracted float value.
+    """
+    # Split the response by commas
+    parts = response.split(",")
+    try:
+        # Extract the desired part and convert it to float
+        value_str = parts[0].strip().rstrip("NADC")  # Remove any suffix like 'NADC'
+        return float(value_str)
+    except (IndexError, ValueError) as e:
+        raise ValueError(f"Unable to parse current value from response: {response}") from e
+
 
 def _parse_output_bool(numeric_value: Union[float, str]) -> bool:
     """Parses and converts the value to boolean type. True is 1.
@@ -150,6 +169,16 @@ class Keithley6517A(VisaInstrument):
             get_cmd="sour:volt:lev?",
             get_parser=float,
             set_cmd=f"sour:volt:lev {{:f}}",
+            unit = 'V',
+            label = 'Voltage',
+        )
+
+        self.add_parameter(
+            "current",
+            get_cmd="meas:curr?",      # Command to retrieve current
+            get_parser=parse_current_from_response,  # Custom parser to convert to float
+            unit = 'A',
+            label = 'Ampere',
         )
 
         if reset_device:
